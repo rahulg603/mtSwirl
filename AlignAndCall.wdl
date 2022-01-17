@@ -450,8 +450,6 @@ task M2 {
   Float ref_size = size(ref_fasta, "GB") + size(ref_fai, "GB")
   Int disk_size = ceil(size(input_bam, "GB") + ref_size) + 20
 
-  String additional_var = "~{'$(tail -n +3 ' + custom_interval + ' | head -n1 | awk -F\'\t\' \'BEGIN {OFS = FS} {print \" -L \"$1\":\"$2\"-\"$3\" \"}\')'} "
-
   # Mem is in units of GB but our command and memory runtime values are in MB
   Int machine_mem = if defined(mem) then mem * 1000 else 3500
   Int command_mem = machine_mem - 500
@@ -466,7 +464,7 @@ task M2 {
       set -e
 
       export GATK_LOCAL_JAR=~{default="/root/gatk.jar" gatk_override}
-      export cust_interval=~{additional_var}
+      export cust_interval=~{"$(tail -n +3 " + custom_interval + " | head -n1 | awk -F'\t' 'BEGIN {OFS = FS} {print \" -L \"$1\":\"$2\"-\"$3\" \"}')"}" "
       echo "~{m2_extra_args}""$cust_interval"
 
       # We need to create these files regardless, even if they stay empty
