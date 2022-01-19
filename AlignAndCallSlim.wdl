@@ -1,7 +1,7 @@
 version 1.0
 
 #import "AlignmentPipeline.wdl" as AlignAndMarkDuplicates
-import "https://api.firecloud.org/ga4gh/v1/tools/mitochondria:AlignmentPipeline/versions/1/plain-WDL/descriptor" as AlignAndMarkDuplicates
+import "https://raw.githubusercontent.com/rahulg603/testing-mito-wdl/master/AlignmentPipeline.wdl" as AlignAndMarkDuplicates
 
 workflow AlignAndCall {
   meta {
@@ -20,8 +20,6 @@ workflow AlignAndCall {
     File mt_bwt
     File mt_pac
     File mt_sa
-    File blacklisted_sites
-    File blacklisted_sites_index
 
     #Shifted reference is used for calling the control region (edge of mitochondria reference).
     #This solves the problem that BWA doesn't support alignment to circular contigs.
@@ -45,10 +43,7 @@ workflow AlignAndCall {
     String? gatk_docker_override
     String? m2_extra_args
     String? m2_filter_extra_args
-    Float? vaf_filter_threshold
-    Float? f_score_beta
     Boolean compress_output_vcf
-    Float? verifyBamID
 
     # Read length used for optimization only. If this is too small CollectWgsMetrics might fail, but the results are not
     # affected by this number. Default is 151.
