@@ -273,7 +273,7 @@ task LiftoverAndCombineVcfs {
       docker: "us.gcr.io/broad-gotc-prod/genomes-in-the-cloud:2.4.2-1552931386"
       preemptible: select_first([preemptible_tries, 5])
     }
-    output{
+    output {
         # rejected_vcf should always be empty
         File rejected_vcf = "~{basename}.rejected.vcf"
         File merged_vcf = "~{basename}.merged.vcf"
