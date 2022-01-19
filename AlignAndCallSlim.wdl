@@ -278,7 +278,7 @@ task LiftoverAndCombineVcfs {
         File rejected_vcf = "~{basename}.rejected.vcf"
         File merged_vcf = "~{basename}.merged.vcf"
         File merged_vcf_index = "~{basename}.merged.vcf.idx"
-        Int number_failed = read_int(~{failed_vars})
+        Int number_failed = read_int("~{failed_vars}")
     }
 }
 
