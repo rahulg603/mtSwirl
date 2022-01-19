@@ -1,6 +1,7 @@
 version 1.0
 
 #import "AlignmentPipeline.wdl" as AlignAndMarkDuplicates
+#import "https://api.firecloud.org/ga4gh/v1/tools/mitochondria:AlignmentPipeline/versions/1/plain-WDL/descriptor" as AlignAndMarkDuplicates
 import "https://raw.githubusercontent.com/rahulg603/testing-mito-wdl/master/AlignmentPipeline.wdl" as AlignAndMarkDuplicates
 
 workflow AlignAndCall {
