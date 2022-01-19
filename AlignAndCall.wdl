@@ -56,6 +56,7 @@ workflow AlignAndCall {
 
     #Optional runtime arguments
     Int? preemptible_tries
+    Int? n_cpu
   }
 
   parameter_meta {
@@ -119,7 +120,8 @@ workflow AlignAndCall {
       m2_extra_args = select_first([m2_extra_args, ""]) + noncntrl_args_suffix,
       custom_interval = non_control_interval,
       mem = M2_mem,
-      preemptible_tries = preemptible_tries
+      preemptible_tries = preemptible_tries,
+      n_cpu = n_cpu
   }
 
   Boolean defined_custom_cntrl = defined(control_shifted)
@@ -139,7 +141,8 @@ workflow AlignAndCall {
       m2_extra_args = select_first([m2_extra_args, ""]) + cntrl_args_suffix,
       custom_interval = control_shifted,
       mem = M2_mem,
-      preemptible_tries = preemptible_tries
+      preemptible_tries = preemptible_tries,
+      n_cpu = n_cpu
   }
 
   call LiftoverAndCombineVcfs {
@@ -447,6 +450,7 @@ task M2 {
     String? gatk_docker_override
     Int mem
     Int? preemptible_tries
+    Int? n_cpu
   }
 
   String output_vcf = "raw" + if compress then ".vcf.gz" else ".vcf"
@@ -492,7 +496,7 @@ task M2 {
       memory: machine_mem + " MB"
       disks: "local-disk " + disk_size + " HDD"
       preemptible: select_first([preemptible_tries, 5])
-      cpu: 2
+      cpu: select_first([n_cpu,2])
   }
   output {
       File raw_vcf = "~{output_vcf}"
