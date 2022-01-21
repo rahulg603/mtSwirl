@@ -79,7 +79,6 @@ task AlignAndMarkDuplicates {
   }
   parameter_meta {
     input_bam: "Unmapped bam"
-    bwa_version: "BWA version to be added to header of aligned bam"
   }
   command <<<
 
