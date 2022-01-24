@@ -479,7 +479,7 @@ task M2 {
       export GATK_LOCAL_JAR=~{default="/root/gatk.jar" gatk_override}
       export cust_interval=~{"$(tail -n +3 " + custom_interval + " | head -n1 | awk -F'\t' 'BEGIN {OFS = FS} {print \" -L \"$1\":\"$2\"-\"$3\" \"}')"}" "
       echo "Extra arguments for mutect2: ""~{m2_extra_args}""$cust_interval"
-      ~{"echo 'Obtaining force calls for specified VCF: '" + basename(force_call_vcf)}
+      ~{"echo 'Obtaining force calls for specified VCF: '" + force_call_vcf}
 
       # We need to create these files regardless, even if they stay empty
       touch bamout.bam
