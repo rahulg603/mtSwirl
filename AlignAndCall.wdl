@@ -50,6 +50,8 @@ workflow AlignAndCall {
     Float? f_score_beta
     Boolean compress_output_vcf
     Float? verifyBamID
+    File? force_call_vcf
+    File? force_call_vcf_index
 
     # Read length used for optimization only. If this is too small CollectWgsMetrics might fail, but the results are not
     # affected by this number. Default is 151.
@@ -416,7 +418,7 @@ task LiftoverAndCombineVcfs {
       I=~{vcf} \
       O=~{basename}.merged.vcf
 
-    cat ~{basename}.merged.vcf | grep ^chrM | wc -l > ~{failed_vars}
+    cat ~{basename}.rejected.vcf | grep ^chrM | wc -l > ~{failed_vars}
     >>>
     runtime {
       disks: "local-disk " + disk_size + " HDD"
@@ -447,6 +449,8 @@ task M2 {
     File? gatk_override
 
     File? custom_interval
+    File? force_call_vcf
+    File? force_call_vcf_index
     # runtime
     String? gatk_docker_override
     Int mem
@@ -475,6 +479,7 @@ task M2 {
       export GATK_LOCAL_JAR=~{default="/root/gatk.jar" gatk_override}
       export cust_interval=~{"$(tail -n +3 " + custom_interval + " | head -n1 | awk -F'\t' 'BEGIN {OFS = FS} {print \" -L \"$1\":\"$2\"-\"$3\" \"}')"}" "
       echo "Extra arguments for mutect2: ""~{m2_extra_args}""$cust_interval"
+      ~{"echo 'Obtaining force calls for specified VCF: '" + basename(force_call_vcf)}
 
       # We need to create these files regardless, even if they stay empty
       touch bamout.bam
@@ -486,6 +491,7 @@ task M2 {
         --read-filter MateUnmappedAndUnmappedReadFilter \
         -O ~{output_vcf} \
         ~{true='--bam-output bamout.bam' false='' make_bamout} \
+        ~{"--alleles" + force_call_vcf}
         ~{m2_extra_args}$cust_interval \
         --annotation StrandBiasBySample \
         --mitochondria-mode \
