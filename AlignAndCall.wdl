@@ -495,7 +495,7 @@ task M2 {
         --read-filter MateUnmappedAndUnmappedReadFilter \
         -O ~{output_vcf} \
         ~{true='--bam-output bamout.bam' false='' make_bamout} \
-        ~{"--alleles" + force_call_vcf} \
+        ~{"--alleles " + force_call_vcf} \
         ~{m2_extra_args}$cust_interval \
         --annotation StrandBiasBySample \
         --mitochondria-mode \
