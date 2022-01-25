@@ -52,6 +52,8 @@ workflow AlignAndCall {
     Float? verifyBamID
     File? force_call_vcf
     File? force_call_vcf_index
+    File? force_call_vcf_shifted
+    File? force_call_vcf_shifted_index
 
     # Read length used for optimization only. If this is too small CollectWgsMetrics might fail, but the results are not
     # affected by this number. Default is 151.
@@ -147,8 +149,8 @@ workflow AlignAndCall {
       custom_interval = control_shifted,
       mem = M2_mem,
       preemptible_tries = preemptible_tries,
-      force_call_vcf = force_call_vcf,
-      force_call_vcf_index = force_call_vcf_index,
+      force_call_vcf = force_call_vcf_shifted,
+      force_call_vcf_index = force_call_vcf_shifted_index,
       n_cpu = n_cpu
   }
 
