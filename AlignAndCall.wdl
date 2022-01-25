@@ -124,6 +124,8 @@ workflow AlignAndCall {
       custom_interval = non_control_interval,
       mem = M2_mem,
       preemptible_tries = preemptible_tries,
+      force_call_vcf = force_call_vcf,
+      force_call_vcf_index = force_call_vcf_index,
       n_cpu = n_cpu
   }
 
@@ -145,6 +147,8 @@ workflow AlignAndCall {
       custom_interval = control_shifted,
       mem = M2_mem,
       preemptible_tries = preemptible_tries,
+      force_call_vcf = force_call_vcf,
+      force_call_vcf_index = force_call_vcf_index,
       n_cpu = n_cpu
   }
 
