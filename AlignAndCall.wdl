@@ -255,6 +255,9 @@ workflow AlignAndCall {
     Float median_coverage = CollectWgsMetrics.median_coverage
     String major_haplogroup = GetContamination.major_hg
     Float? contamination = FilterContamination.contamination
+    String hasContamination = GetContamination.hasContamination
+    Float contamination_major = GetContamination.major_level
+    Float contamination_minor = GetContamination.minor_level
   }
 }
 
