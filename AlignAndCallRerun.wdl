@@ -210,8 +210,8 @@ workflow AlignAndCall {
     File mt_aligned_bai = AlignToMt.mt_aligned_bai
     File mt_aligned_shifted_bam = AlignToShiftedMt.mt_aligned_bam
     File mt_aligned_shifted_bai = AlignToShiftedMt.mt_aligned_bai
-    File out_vcf = LiftoverAndCombineVcfs.merged_vcf
-    File out_vcf_index = LiftoverAndCombineVcfs.merged_vcf_index
+    File out_vcf = FilterContamination.filtered_vcf
+    File out_vcf_index = FilterContamination.filtered_vcf_idx
     File duplicate_metrics = AlignToMt.duplicate_metrics
     File coverage_metrics = CollectWgsMetrics.metrics
     File theoretical_sensitivity_metrics = CollectWgsMetrics.theoretical_sensitivity
