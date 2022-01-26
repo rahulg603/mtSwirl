@@ -178,7 +178,7 @@ workflow AlignAndCall {
       preemptible_tries = preemptible_tries
   }
 
-  call Filter as FilterContamination {
+  call AlignAndCallFull.Filter as FilterContamination {
     input:
       raw_vcf = LiftoverAndCombineVcfs.merged_vcf,
       raw_vcf_index = LiftoverAndCombineVcfs.merged_vcf_index,
