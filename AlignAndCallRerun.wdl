@@ -66,6 +66,7 @@ workflow AlignAndCall {
 
     #Optional runtime arguments
     Int? preemptible_tries
+    Int? n_cpu
   }
 
   parameter_meta {
@@ -184,9 +185,9 @@ workflow AlignAndCall {
       raw_vcf_index = LiftoverAndCombineVcfs.merged_vcf_index,
       raw_vcf_stats = MergeStats.stats,
       run_contamination = true,
-      hasContamination = GetContamination.hasContamination,
-      contamination_major = GetContamination.major_level,
-      contamination_minor = GetContamination.minor_level,
+      hasContamination = hasContamination,
+      contamination_major = contamination_major,
+      contamination_minor = contamination_minor,
       verifyBamID = verifyBamID,
       base_name = base_name,
       ref_fasta = mt_fasta,
