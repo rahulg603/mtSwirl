@@ -5,7 +5,7 @@ version 1.0
 import "https://raw.githubusercontent.com/rahulg603/testing-mito-wdl/master/AlignmentPipeline.wdl" as AlignAndMarkDuplicates
 import "https://raw.githubusercontent.com/rahulg603/testing-mito-wdl/master/AlignAndCall.wdl" as AlignAndCallFull
 
-workflow AlignAndCall {
+workflow AlignAndCallRerun {
   meta {
     description: "Takes in unmapped bam and outputs VCF of SNP/Indel calls on the mitochondria."
   }
