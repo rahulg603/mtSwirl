@@ -329,7 +329,7 @@ task PreProcessBam {
     java -Xms4000m -jar /usr/gitc/picard.jar \
       SortSam \
       INPUT=md.bam \
-      OUTPUT=~{output_bam_basename}.bam \
+      OUTPUT=~{basename}.bam \
       SORT_ORDER="coordinate" \
       CREATE_INDEX=true \
       MAX_RECORDS_IN_RAM=300000
@@ -343,8 +343,8 @@ task PreProcessBam {
     docker: "us.gcr.io/broad-gotc-prod/genomes-in-the-cloud:2.4.2-1552931386"
   }
   output {
-    File output_bam = "~{output_bam_basename}.bam"
-    File output_bam_index = "~{output_bam_basename}.bai"
+    File output_bam = "~{basename}.bam"
+    File output_bam_index = "~{basename}.bai"
     File duplicate_metrics = "~{metrics_filename}"
   }
 }
