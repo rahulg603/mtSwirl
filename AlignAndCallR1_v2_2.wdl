@@ -49,8 +49,8 @@ workflow AlignAndCallR1 {
     input:
       input_bam = input_bam,
       input_bam_index = input_bai,
-      ref_fasta = mt_fasta,
-      ref_fasta_index = mt_fasta_index,
+      ref_fasta = ref_fasta,
+      ref_fasta_index = ref_fasta_index,
       read_length = max_read_length,
       coverage_cap = 100000,
       mt_interval_list = mt_interval_list,
@@ -315,7 +315,7 @@ task PreProcessBam {
     
     java -Xms4000m -jar /usr/gitc/picard.jar \
       MarkDuplicates \
-      INPUT=~{input_bam}.bam \
+      INPUT=~{input_bam} \
       OUTPUT=md.bam \
       METRICS_FILE=~{metrics_filename} \
       VALIDATION_STRINGENCY=SILENT \
