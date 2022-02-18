@@ -204,7 +204,7 @@ workflow AlignAndCallR1 {
 
  call MergeVcfs {
     input:
-      vcf1 = FilterContamination.filtered_vcf
+      vcf1 = FilterContamination.filtered_vcf,
       vcf2 = FilterNuc.filtered_vcf
  }
 
