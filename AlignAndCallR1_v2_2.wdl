@@ -204,8 +204,8 @@ workflow AlignAndCallR1 {
 
  call MergeVcfs {
     input:
-      vcf1 = FilterContamination.filtered_vcf,
-      vcf2 = FilterNuc.filtered_vcf
+      vcf_no_filter = FilterContamination.filtered_vcf,
+      vcf_to_filter = FilterNuc.filtered_vcf
  }
 
   output {
@@ -436,9 +436,12 @@ task CollectWgsMetrics {
 
 task MergeVcfs {
   input {
-    File vcf1
-    File vcf2
+    File vcf_no_filter
+    File vcf_to_filter
     String basename = basename(vcf1, ".vcf")
+
+    File? gatk_override
+    String? gatk_docker_override
 
     # runtime
     Int? preemptible_tries
@@ -449,16 +452,23 @@ task MergeVcfs {
     command<<<
       set -e
 
-      java -jar /usr/gitc/picard.jar MergeVcfs \
-        I=~{vcf1} \
-        I=~{vcf2} \
-        O=~{basename}.mergedNuc.vcf
+      export GATK_LOCAL_JAR=~{default="/root/gatk.jar" gatk_override}
+
+      gatk --java-options '-Xmx1000m' SelectVariants \
+      -V ~{vcf_to_filter} \
+      --exclude-filtered \
+      -O filtered_vcf.vcf
+
+      gatk --java-options '-Xmx1000m' MergeVcfs \
+      I=~{vcf_no_filter} \
+      I=filtered_vcf.vcf \
+      O=~{basename}.mergedNuc.vcf
     >>>
 
     runtime {
       disks: "local-disk " + disk_size + " HDD"
       memory: "1200 MB"
-      docker: "us.gcr.io/broad-gotc-prod/genomes-in-the-cloud:2.4.2-1552931386"
+      docker: select_first([gatk_docker_override, "us.gcr.io/broad-gatk/gatk:4.2.4.1"])
       preemptible: select_first([preemptible_tries, 5])
     }
     output {
@@ -679,7 +689,7 @@ task Filter {
       gatk VariantFiltration -V filtered.vcf \
         -O ~{output_vcf} \
         --apply-allele-specific-filters \
-        ~{"--mask-name 'blacklisted_site' --mask" + blacklisted_sites}
+        ~{"--mask-name 'blacklisted_site' --mask " + blacklisted_sites}
         
   >>>
   runtime {
