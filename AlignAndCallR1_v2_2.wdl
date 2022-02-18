@@ -438,7 +438,7 @@ task MergeVcfs {
   input {
     File vcf_no_filter
     File vcf_to_filter
-    String basename = basename(vcf1, ".vcf")
+    String basename = basename(vcf_no_filter, ".vcf")
 
     File? gatk_override
     String? gatk_docker_override
@@ -447,7 +447,7 @@ task MergeVcfs {
     Int? preemptible_tries
   }
 
-  Int disk_size = ceil(size(vcf1, "GB") + size(vcf2, "GB")) + 20
+  Int disk_size = ceil(size(vcf_no_filter, "GB") + size(vcf_to_filter, "GB")) + 20
 
     command<<<
       set -e
