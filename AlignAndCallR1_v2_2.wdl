@@ -296,7 +296,6 @@ task PreProcessBam {
   input {
     File input_bam
     File input_bai
-    String output_bam_basename
     File ref_fasta
     File ref_fasta_index
     File ref_dict
