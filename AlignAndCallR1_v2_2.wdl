@@ -212,7 +212,7 @@ workflow AlignAndCallR1 {
     File out_vcf = FilterContamination.filtered_vcf
     File out_vcf_index = FilterContamination.filtered_vcf_idx
     File joint_vcf = MergeVcfs.merged_vcf
-    File joint_vcf_index = MergeVcfs.merged_vcf_idx
+    File joint_vcf_index = MergeVcfs.merged_vcf_index
     File input_vcf_for_haplochecker = SplitMultiAllelicsAndRemoveNonPassSites.vcf_for_haplochecker
     File duplicate_metrics = PreProcessBam.duplicate_metrics
     File coverage_metrics = CollectWgsMetrics.metrics
