@@ -454,12 +454,12 @@ task MergeVcfs {
 
       export GATK_LOCAL_JAR=~{default="/root/gatk.jar" gatk_override}
 
-      gatk --java-options '-Xmx1000m' SelectVariants \
+      gatk SelectVariants \
       -V ~{vcf_to_filter} \
       --exclude-filtered \
       -O filtered_vcf.vcf
 
-      gatk --java-options '-Xmx1000m' MergeVcfs \
+      gatk MergeVcfs \
       I=~{vcf_no_filter} \
       I=filtered_vcf.vcf \
       O=~{basename}.mergedNuc.vcf
