@@ -14,7 +14,7 @@ workflow AlignAndCallR2 {
     File unmapped_bam
     String base_name
 
-    File nuc_interval_list
+    File? nuc_interval_list
     File mt_interval_list
 
     File mt_dict
