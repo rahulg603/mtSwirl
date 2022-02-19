@@ -454,7 +454,7 @@ task FilterVcf {
       export GATK_LOCAL_JAR=~{default="/root/gatk.jar" gatk_override}
 
       gatk SelectVariants \
-      -V ~{vcf_to_filter} \
+      -V ~{vcf} \
       --exclude-filtered \
       -O ~{basename}.pass.vcf
 
