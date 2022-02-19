@@ -66,6 +66,7 @@ workflow AlignAndCallR1 {
       ref_dict = ref_dict
   }
 
+  # its probably worth implementing haplotypecaller as well...
   # call CallNuc {
   #   input:
   #     input_bam = input_bam,
@@ -94,7 +95,7 @@ workflow AlignAndCallR1 {
       compress = compress_output_vcf,
       gatk_override = gatk_override,
       gatk_docker_override = gatk_docker_override,
-      m2_extra_args = select_first([m2_extra_args, ""]) + " --minimum-allele-fraction 0.95",
+      m2_extra_args = select_first([m2_extra_args, ""]) + " --minimum-allele-fraction 0.9",
       mem = M2_mem,
       preemptible_tries = preemptible_tries,
       n_cpu = n_cpu
@@ -149,7 +150,7 @@ workflow AlignAndCallR1 {
       compress = compress_output_vcf,
       gatk_override = gatk_override,
       gatk_docker_override = gatk_docker_override,
-      m2_extra_filtering_args = m2_filter_extra_args,
+      m2_extra_filtering_args = select_first([m2_filter_extra_args, ""]) + " --min-median-mapping-quality 0",
       max_alt_allele_count = 4,
       vaf_filter_threshold = 0,
       blacklisted_sites = blacklisted_sites,
@@ -159,7 +160,6 @@ workflow AlignAndCallR1 {
       preemptible_tries = preemptible_tries
   }
 
- 
   call SplitMultiAllelicsAndRemoveNonPassSites {
     input:
       ref_fasta = mt_fasta,
@@ -193,7 +193,7 @@ workflow AlignAndCallR1 {
       compress = compress_output_vcf,
       gatk_override = gatk_override,
       gatk_docker_override = gatk_docker_override,
-      m2_extra_filtering_args = m2_filter_extra_args,
+      m2_extra_filtering_args = select_first([m2_filter_extra_args, ""]) + " --min-median-mapping-quality 0",
       max_alt_allele_count = 4,
       vaf_filter_threshold = vaf_filter_threshold,
       blacklisted_sites = blacklisted_sites,
@@ -202,17 +202,17 @@ workflow AlignAndCallR1 {
       preemptible_tries = preemptible_tries
  }
 
- call MergeVcfs {
+ call FilterVcf {
     input:
-      vcf_no_filter = FilterContamination.filtered_vcf,
-      vcf_to_filter = FilterNuc.filtered_vcf
+      vcf = FilterNuc.filtered_vcf
  }
 
   output {
     File out_vcf = FilterContamination.filtered_vcf
     File out_vcf_index = FilterContamination.filtered_vcf_idx
-    File joint_vcf = MergeVcfs.merged_vcf
-    File joint_vcf_index = MergeVcfs.merged_vcf_index
+    File nuc_vcf = FilterVcf.filtered_vcf
+    File nuc_vcf_index = FilterVcf.filtered_vcf_index
+    Int nuc_variants_pass = FilterVcf.post_filt_vars
     File input_vcf_for_haplochecker = SplitMultiAllelicsAndRemoveNonPassSites.vcf_for_haplochecker
     File duplicate_metrics = PreProcessBam.duplicate_metrics
     File coverage_metrics = CollectWgsMetrics.metrics
@@ -434,6 +434,46 @@ task CollectWgsMetrics {
   }
 }
 
+task FilterVcf {
+  input {
+    File vcf
+    String basename = basename(vcf, ".vcf")
+
+    File? gatk_override
+    String? gatk_docker_override
+
+    # runtime
+    Int? preemptible_tries
+  }
+
+  Int disk_size = ceil(size(vcf, "GB")) + 20
+
+    command<<<
+      set -e
+
+      export GATK_LOCAL_JAR=~{default="/root/gatk.jar" gatk_override}
+
+      gatk SelectVariants \
+      -V ~{vcf_to_filter} \
+      --exclude-filtered \
+      -O ~{basename}.pass.vcf
+
+      gatk CountVariants -V ~{basename}.pass.vcf | tail -n1 > out.txt
+    >>>
+
+    runtime {
+      disks: "local-disk " + disk_size + " HDD"
+      memory: "1200 MB"
+      docker: select_first([gatk_docker_override, "us.gcr.io/broad-gatk/gatk:4.2.4.1"])
+      preemptible: select_first([preemptible_tries, 5])
+    }
+    output {
+      File filtered_vcf = "~{basename}.pass.vcf"
+      File filtered_vcf_index = "~{basename}.pass.vcf.idx"
+      Int post_filt_vars = read_int('out.txt')
+    }
+}
+
 task MergeVcfs {
   input {
     File vcf_no_filter
@@ -463,6 +503,8 @@ task MergeVcfs {
       I=~{vcf_no_filter} \
       I=filtered_vcf.vcf \
       O=~{basename}.mergedNuc.vcf
+
+      gatk CountVariants -V filtered_vcf.vcf | tail -n1 > out.txt
     >>>
 
     runtime {
@@ -474,6 +516,7 @@ task MergeVcfs {
     output {
       File merged_vcf = "~{basename}.mergedNuc.vcf"
       File merged_vcf_index = "~{basename}.mergedNuc.vcf.idx"
+      Int post_filt_vars = read_int('out.txt')
     }
 }
 
