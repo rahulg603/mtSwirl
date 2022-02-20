@@ -164,7 +164,8 @@ task AlignAndMarkDuplicates {
       I=mdsort.bam \
       O=~{output_bam_basename}.bam \
       REFERENCE=~{target_ref_fasta} \
-      ALLOW_INCOMPLETE_DICT_CONCORDANCE=true
+      ALLOW_INCOMPLETE_DICT_CONCORDANCE=true \
+      CREATE_INDEX=true
   >>>
   runtime {
     preemptible: select_first([preemptible_tries, 5])
