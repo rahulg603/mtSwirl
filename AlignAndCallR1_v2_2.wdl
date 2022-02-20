@@ -559,9 +559,11 @@ task LiftoverAndCombineVcfs {
       CHAIN=~{shift_back_chain} \
       REJECT=~{basename}.rejected.vcf
 
+    cat ~{vcf} | perl -ne 'print unless /^##contig=<ID=(?!chrM)/' > chrMFiltVCF.vcf
+
     java -jar /usr/gitc/picard.jar MergeVcfs \
       I=~{basename}.shifted_back.vcf \
-      I=~{vcf} \
+      I=chrMFiltVCF.vcf \
       O=~{basename}.merged.vcf
 
     cat ~{basename}.rejected.vcf | grep ^chrM | wc -l > ~{failed_vars}
