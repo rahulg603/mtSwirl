@@ -2,7 +2,7 @@ version 1.0
 
 #import "AlignmentPipeline.wdl" as AlignAndMarkDuplicates
 #import "https://api.firecloud.org/ga4gh/v1/tools/mitochondria:AlignmentPipeline/versions/1/plain-WDL/descriptor" as AlignAndMarkDuplicates
-import "https://raw.githubusercontent.com/rahulg603/testing-mito-wdl/master/AlignmentPipeline.wdl" as AlignAndMarkDuplicates
+import "https://raw.githubusercontent.com/rahulg603/testing-mito-wdl/master/AlignmentPipeline_v2_2.wdl" as AlignAndMarkDuplicates
 import "https://raw.githubusercontent.com/rahulg603/testing-mito-wdl/master/AlignAndCallR1_v2_2.wdl" as AlignAndCallR1_v2_2
 
 workflow AlignAndCallR2 {
@@ -95,6 +95,9 @@ workflow AlignAndCallR2 {
       mt_bwt = mt_andNuc_bwt,
       mt_pac = mt_andNuc_pac,
       mt_sa = mt_andNuc_sa,
+      target_dict = mt_dict,
+      target_fasta = mt_fasta,
+      target_fasta_index = mt_fasta_index,
       preemptible_tries = preemptible_tries
   }
 
@@ -103,12 +106,15 @@ workflow AlignAndCallR2 {
       input_bam = unmapped_bam,
       mt_dict = mt_andNuc_shifted_dict,
       mt_fasta = mt_andNuc_shifted_fasta,
-      mt_fasta_index = mt_shifted_fasta_index,
+      mt_fasta_index = mt_andNuc_shifted_fasta_index,
       mt_amb = mt_andNuc_shifted_amb,
       mt_ann = mt_andNuc_shifted_ann,
       mt_bwt = mt_andNuc_shifted_bwt,
       mt_pac = mt_andNuc_shifted_pac,
       mt_sa = mt_andNuc_shifted_sa,
+      target_dict = mt_shifted_dict,
+      target_fasta = mt_shifted_fasta,
+      target_fasta_index = mt_shifted_fasta_index,
       preemptible_tries = preemptible_tries
   }
 
