@@ -56,6 +56,7 @@ workflow AlignAndCallR2 {
 
     File? gatk_override
     String? gatk_docker_override
+    String gatk_version = "4.2.4.1"
     String? m2_extra_args
     String? m2_filter_extra_args
     Float? vaf_filter_threshold
@@ -124,6 +125,7 @@ workflow AlignAndCallR2 {
       input_bam_index = AlignToMt.mt_aligned_bai,
       ref_fasta = mt_fasta,
       ref_fasta_index = mt_fasta_index,
+      ref_fasta_dict = mt_dict,
       read_length = max_read_length,
       coverage_cap = 100000,
       mt_interval_list = mt_interval_list,
@@ -145,6 +147,7 @@ workflow AlignAndCallR2 {
       compress = compress_output_vcf,
       gatk_override = gatk_override,
       gatk_docker_override = gatk_docker_override,
+      gatk_version = gatk_version,
       # Everything is called except the control region.
       m2_extra_args = select_first([m2_extra_args, ""]) + noncntrl_args_suffix,
       mem = M2_mem,
@@ -168,6 +171,7 @@ workflow AlignAndCallR2 {
       compress = compress_output_vcf,
       gatk_override = gatk_override,
       gatk_docker_override = gatk_docker_override,
+      gatk_version = gatk_version,
       # Only the control region is now called.
       m2_extra_args = select_first([m2_extra_args, ""]) + cntrl_args_suffix,
       mem = M2_mem,
@@ -194,6 +198,7 @@ workflow AlignAndCallR2 {
       non_shifted_stats = CallMt.stats,
       gatk_override = gatk_override,
       gatk_docker_override = gatk_docker_override,
+      gatk_version = gatk_version,
       preemptible_tries = preemptible_tries
   }
 
@@ -214,6 +219,7 @@ workflow AlignAndCallR2 {
       compress = compress_output_vcf,
       gatk_override = gatk_override,
       gatk_docker_override = gatk_docker_override,
+      gatk_version = gatk_version,
       m2_extra_filtering_args = m2_filter_extra_args,
       max_alt_allele_count = 4,
       vaf_filter_threshold = vaf_filter_threshold,
