@@ -200,18 +200,19 @@ workflow AlignAndCallR1 {
       blacklisted_sites_index = blacklisted_sites_index,
       f_score_beta = f_score_beta,
       preemptible_tries = preemptible_tries
- }
+  }
 
- call FilterVcf {
-    input:
-      vcf = FilterNuc.filtered_vcf
- }
+  call FilterVcf {
+      input:
+        vcf = FilterNuc.filtered_vcf
+  }
 
   output {
     File out_vcf = FilterContamination.filtered_vcf
     File out_vcf_index = FilterContamination.filtered_vcf_idx
     File nuc_vcf = FilterVcf.filtered_vcf
     File nuc_vcf_index = FilterVcf.filtered_vcf_index
+    File nuc_vcf_unfiltered = FilterNuc.filtered_vcf
     Int nuc_variants_pass = FilterVcf.post_filt_vars
     File input_vcf_for_haplochecker = SplitMultiAllelicsAndRemoveNonPassSites.vcf_for_haplochecker
     File duplicate_metrics = PreProcessBam.duplicate_metrics
@@ -380,6 +381,7 @@ task CollectWgsMetrics {
     File input_bam_index
     File ref_fasta
     File ref_fasta_index
+    File ref_fasta_dict
     Int? read_length
     Int? coverage_cap
     File? mt_interval_list
