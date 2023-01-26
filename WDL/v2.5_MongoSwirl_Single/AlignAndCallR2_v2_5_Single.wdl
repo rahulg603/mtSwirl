@@ -1,6 +1,6 @@
 version 1.0
 
-import "https://raw.githubusercontent.com/rahulg603/testing-mito-wdl/master/WDL/v2.5_MongoSwirl_Single/MongoTasks_v2_5_Single.wdl" as MongoTasks_Single
+import "https://raw.githubusercontent.com/rahulg603/mtSwirl/master/WDL/v2.5_MongoSwirl_Single/MongoTasks_v2_5_Single.wdl" as MongoTasks_Single
 
 workflow AlignAndCallR2 {
   meta {
