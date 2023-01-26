@@ -62,7 +62,7 @@ task MongoSubsetBamToChrMAndRevert {
     mkdir out
 
     this_bam="~{input_bam}"
-    this_bai="~{select_first([input_bai, input_bam + '.crai'])}"
+    this_bai="~{select_first([input_bai, this_bam + '.crai'])}"
     this_sample=out/"~{sample_name}"
 
     ~{if force_manual_download then "gsutil " + requester_pays_prefix + " cp ~{d}{this_bam} bamfile.cram" else ""}
