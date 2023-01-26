@@ -34,6 +34,7 @@ task MongoSubsetBamToChrMAndRevert {
     Int? preemptible_tries
   }
   Float ref_size = if defined(ref_fasta) then size(ref_fasta, "GB") + size(ref_fasta_index, "GB") + size(ref_dict, "GB") else 0
+  String appended_bam = input_bam + '.crai'
   Int disk_size = ceil(ref_size) + ceil(size(input_bam,'GB')) + 20
   Int read_length_for_optimization = select_first([read_length, 151])
   Int machine_mem = select_first([mem, 4])
@@ -62,7 +63,7 @@ task MongoSubsetBamToChrMAndRevert {
     mkdir out
 
     this_bam="~{input_bam}"
-    this_bai="~{select_first([input_bai, this_bam + '.crai'])}"
+    this_bai="~{select_first([input_bai, appended_bam])}"
     this_sample=out/"~{sample_name}"
 
     ~{if force_manual_download then "gsutil " + requester_pays_prefix + " cp ~{d}{this_bam} bamfile.cram" else ""}
