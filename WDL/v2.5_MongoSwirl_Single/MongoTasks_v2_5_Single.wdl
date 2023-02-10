@@ -18,6 +18,7 @@ task MongoSubsetBamToChrMAndRevert {
     File? ref_dict
 
     Boolean skip_restore_hardclips
+    Boolean single_end_duplicate_allow
     String? read_name_regex
     Int? read_length
     Int? coverage_cap
@@ -71,16 +72,24 @@ task MongoSubsetBamToChrMAndRevert {
     ~{if force_manual_download then "this_bam=bamfile.cram" else ""}
     ~{if force_manual_download then "this_bai=bamfile.cram.crai" else ""}
     
-    gatk --java-options "-Xmx~{command_mem}m" PrintReads \
-      ~{"-R " + ref_fasta} \
-      ~{"-L " + mt_interval_list} \
-      ~{"-L " + nuc_interval_list} \
-      ~{"-L " + contig_name} \
-      --read-filter MateOnSameContigOrNoMappedMateReadFilter \
-      --read-filter MateUnmappedAndUnmappedReadFilter \
-      ~{"--gcs-project-for-requester-pays " + requester_pays_project} \
-      ~{if force_manual_download then '-I bamfile.cram --read-index bamfile.cram.crai' else "-I ~{d}{this_bam} --read-index ~{d}{this_bai}"} \
-      -O "~{d}{this_sample}.bam"  ~{printreads_extra_args}
+    if [ "~{single_end_duplicate_allow}" = true ]; then
+      echo "RUNNING IN SINGLE END MODE"
+      samtools view -T ~{ref_fasta} -f 4 -b ~{if force_manual_download then 'bamfile.cram' else "~{d}{this_bam}"} > out1.bam
+      samtools view -T ~{ref_fasta} -F 4 -b ~{if force_manual_download then 'bamfile.cram' else "~{d}{this_bam}"} ~{contig_name} > out2.bam
+      samtools merge "~{d}{this_sample}.bam" out[12].bam
+      samtools index "~{d}{this_sample}.bam"
+    else
+      gatk --java-options "-Xmx~{command_mem}m" PrintReads \
+        ~{"-R " + ref_fasta} \
+        ~{"-L " + mt_interval_list} \
+        ~{"-L " + nuc_interval_list} \
+        ~{"-L " + contig_name} \
+        --read-filter MateOnSameContigOrNoMappedMateReadFilter \
+        --read-filter MateUnmappedAndUnmappedReadFilter \
+        ~{"--gcs-project-for-requester-pays " + requester_pays_project} \
+        ~{if force_manual_download then '-I bamfile.cram --read-index bamfile.cram.crai' else "-I ~{d}{this_bam} --read-index ~{d}{this_bai}"} \
+        -O "~{d}{this_sample}.bam"  ~{printreads_extra_args}
+    fi
 
     echo "Now removing mapping..."
     set +e
@@ -135,16 +144,22 @@ task MongoSubsetBamToChrMAndRevert {
     CODE
 
     echo "Now preprocessing subsetted bam..."
-    gatk --java-options "-Xmx~{command_mem}m" MarkDuplicates \
-      INPUT="~{d}{this_sample}.bam" \
-      OUTPUT=md.bam \
-      METRICS_FILE="~{d}{this_sample}.duplicate.metrics" \
-      VALIDATION_STRINGENCY=SILENT \
-      ~{"READ_NAME_REGEX=" + read_name_regex} \
-      OPTICAL_DUPLICATE_PIXEL_DISTANCE=2500 \
-      ASSUME_SORT_ORDER="queryname" \
-      CLEAR_DT="false" \
-      ADD_PG_TAG_TO_READS=false
+
+    if [ "~{single_end_duplicate_allow}" = true ]; then
+      cp "~{d}{this_sample}.bam" md.bam
+      touch "~{d}{this_sample}.duplicate.metrics"
+    else
+      gatk --java-options "-Xmx~{command_mem}m" MarkDuplicates \
+        INPUT="~{d}{this_sample}.bam" \
+        OUTPUT=md.bam \
+        METRICS_FILE="~{d}{this_sample}.duplicate.metrics" \
+        VALIDATION_STRINGENCY=SILENT \
+        ~{"READ_NAME_REGEX=" + read_name_regex} \
+        OPTICAL_DUPLICATE_PIXEL_DISTANCE=2500 \
+        ASSUME_SORT_ORDER="queryname" \
+        CLEAR_DT="false" \
+        ADD_PG_TAG_TO_READS=false
+    fi
 
     gatk --java-options "-Xmx~{command_mem}m" SortSam \
       INPUT=md.bam \
@@ -1342,6 +1357,7 @@ task MongoAlignToMtRegShiftedAndMetrics {
     File mt_shifted_cat_dict
 
     File mt_interval_list
+    Boolean single_end_duplicate_allow
 
     String? read_name_regex
 
@@ -1390,53 +1406,94 @@ task MongoAlignToMtRegShiftedAndMetrics {
     # set the bash variable needed for the command-line
     /usr/gitc/bwa index "~{d}{this_mt_cat_fasta}"
     bash_ref_fasta="~{d}{this_mt_cat_fasta}"
-    java -Xms5000m -jar /usr/gitc/picard.jar \
-      SamToFastq \
-      INPUT="~{d}{this_bam}" \
-      FASTQ=/dev/stdout \
-      INTERLEAVE=true \
-      NON_PF=true | \
-    /usr/gitc/~{this_bwa_commandline} /dev/stdin - 2> >(tee "~{d}{this_output_bam_basename}.bwa.stderr.log" >&2) | \
-    java -Xms5000m -jar /usr/gitc/picard.jar \
-      MergeBamAlignment \
-      VALIDATION_STRINGENCY=SILENT \
-      EXPECTED_ORIENTATIONS=FR \
-      ATTRIBUTES_TO_RETAIN=X0 \
-      ATTRIBUTES_TO_REMOVE=NM \
-      ATTRIBUTES_TO_REMOVE=MD \
-      ALIGNED_BAM=/dev/stdin \
-      UNMAPPED_BAM="~{d}{this_bam}" \
-      OUTPUT=mba.bam \
-      REFERENCE_SEQUENCE="~{d}{this_mt_cat_fasta}" \
-      PAIRED_RUN=true \
-      SORT_ORDER="unsorted" \
-      IS_BISULFITE_SEQUENCE=false \
-      ALIGNED_READS_ONLY=false \
-      CLIP_ADAPTERS=false \
-      MAX_RECORDS_IN_RAM=2000000 \
-      ADD_MATE_CIGAR=true \
-      MAX_INSERTIONS_OR_DELETIONS=-1 \
-      PRIMARY_ALIGNMENT_STRATEGY=MostDistant \
-      PROGRAM_RECORD_ID="bwamem" \
-      PROGRAM_GROUP_VERSION=$BWAVERSION \
-      PROGRAM_GROUP_COMMAND_LINE="~{this_bwa_commandline}" \
-      PROGRAM_GROUP_NAME="bwamem" \
-      UNMAPPED_READ_STRATEGY=COPY_TO_TAG \
-      ALIGNER_PROPER_PAIR_FLAGS=true \
-      UNMAP_CONTAMINANT_READS=true \
-      ADD_PG_TAG_TO_READS=false
 
-    java -Xms5000m -jar /usr/gitc/picard.jar \
-      MarkDuplicates \
-      INPUT=mba.bam \
-      OUTPUT=md.bam \
-      METRICS_FILE="~{d}{this_output_bam_basename}.metrics" \
-      VALIDATION_STRINGENCY=SILENT \
-      ~{"READ_NAME_REGEX=" + read_name_regex} \
-      OPTICAL_DUPLICATE_PIXEL_DISTANCE=2500 \
-      ASSUME_SORT_ORDER="queryname" \
-      CLEAR_DT="false" \
-      ADD_PG_TAG_TO_READS=false
+    if [ "~{single_end_duplicate_allow}" = true ]; then
+      java -Xms5000m -jar /usr/gitc/picard.jar \
+        SamToFastq \
+        INPUT="~{d}{this_bam}" \
+        FASTQ=/dev/stdout \
+        INTERLEAVE=true \
+        NON_PF=true | \
+      /usr/gitc/~{this_bwa_commandline} /dev/stdin - 2> >(tee "~{d}{this_output_bam_basename}.bwa.stderr.log" >&2) | \
+      java -Xms5000m -jar /usr/gitc/picard.jar \
+        MergeBamAlignment \
+        VALIDATION_STRINGENCY=SILENT \
+        EXPECTED_ORIENTATIONS=FR \
+        ATTRIBUTES_TO_RETAIN=X0 \
+        ATTRIBUTES_TO_REMOVE=NM \
+        ATTRIBUTES_TO_REMOVE=MD \
+        ATTRIBUTES_TO_REMOVE=RG \
+        ALIGNED_BAM=/dev/stdin \
+        UNMAPPED_BAM="~{d}{this_bam}" \
+        OUTPUT=md.bam \
+        REFERENCE_SEQUENCE="~{d}{this_mt_cat_fasta}" \
+        PAIRED_RUN=false \
+        SORT_ORDER="unsorted" \
+        IS_BISULFITE_SEQUENCE=false \
+        ALIGNED_READS_ONLY=false \
+        CLIP_ADAPTERS=false \
+        MAX_RECORDS_IN_RAM=2000000 \
+        ADD_MATE_CIGAR=true \
+        MAX_INSERTIONS_OR_DELETIONS=-1 \
+        PRIMARY_ALIGNMENT_STRATEGY=MostDistant \
+        PROGRAM_RECORD_ID="bwamem" \
+        PROGRAM_GROUP_VERSION=$BWAVERSION \
+        PROGRAM_GROUP_COMMAND_LINE="~{this_bwa_commandline}" \
+        PROGRAM_GROUP_NAME="bwamem" \
+        UNMAPPED_READ_STRATEGY=COPY_TO_TAG \
+        ALIGNER_PROPER_PAIR_FLAGS=true \
+        UNMAP_CONTAMINANT_READS=true \
+        ADD_PG_TAG_TO_READS=false
+
+    else
+      java -Xms5000m -jar /usr/gitc/picard.jar \
+        SamToFastq \
+        INPUT="~{d}{this_bam}" \
+        FASTQ=/dev/stdout \
+        INTERLEAVE=true \
+        NON_PF=true | \
+      /usr/gitc/~{this_bwa_commandline} /dev/stdin - 2> >(tee "~{d}{this_output_bam_basename}.bwa.stderr.log" >&2) | \
+      java -Xms5000m -jar /usr/gitc/picard.jar \
+        MergeBamAlignment \
+        VALIDATION_STRINGENCY=SILENT \
+        EXPECTED_ORIENTATIONS=FR \
+        ATTRIBUTES_TO_RETAIN=X0 \
+        ATTRIBUTES_TO_REMOVE=NM \
+        ATTRIBUTES_TO_REMOVE=MD \
+        ALIGNED_BAM=/dev/stdin \
+        UNMAPPED_BAM="~{d}{this_bam}" \
+        OUTPUT=mba.bam \
+        REFERENCE_SEQUENCE="~{d}{this_mt_cat_fasta}" \
+        PAIRED_RUN=true \
+        SORT_ORDER="unsorted" \
+        IS_BISULFITE_SEQUENCE=false \
+        ALIGNED_READS_ONLY=false \
+        CLIP_ADAPTERS=false \
+        MAX_RECORDS_IN_RAM=2000000 \
+        ADD_MATE_CIGAR=true \
+        MAX_INSERTIONS_OR_DELETIONS=-1 \
+        PRIMARY_ALIGNMENT_STRATEGY=MostDistant \
+        PROGRAM_RECORD_ID="bwamem" \
+        PROGRAM_GROUP_VERSION=$BWAVERSION \
+        PROGRAM_GROUP_COMMAND_LINE="~{this_bwa_commandline}" \
+        PROGRAM_GROUP_NAME="bwamem" \
+        UNMAPPED_READ_STRATEGY=COPY_TO_TAG \
+        ALIGNER_PROPER_PAIR_FLAGS=true \
+        UNMAP_CONTAMINANT_READS=true \
+        ADD_PG_TAG_TO_READS=false
+      
+      java -Xms5000m -jar /usr/gitc/picard.jar \
+        MarkDuplicates \
+        INPUT=mba.bam \
+        OUTPUT=md.bam \
+        METRICS_FILE="~{d}{this_output_bam_basename}.metrics" \
+        VALIDATION_STRINGENCY=SILENT \
+        ~{"READ_NAME_REGEX=" + read_name_regex} \
+        OPTICAL_DUPLICATE_PIXEL_DISTANCE=2500 \
+        ASSUME_SORT_ORDER="queryname" \
+        CLEAR_DT="false" \
+        ADD_PG_TAG_TO_READS=false
+    fi
 
     java -Xms5000m -jar /usr/gitc/picard.jar \
       SortSam \
@@ -1459,53 +1516,94 @@ task MongoAlignToMtRegShiftedAndMetrics {
     # set the bash variable needed for the command-line
     /usr/gitc/bwa index "~{d}{this_mt_shifted_cat_fasta}"
     bash_ref_fasta="~{d}{this_mt_shifted_cat_fasta}"
-    java -Xms5000m -jar /usr/gitc/picard.jar \
-      SamToFastq \
-      INPUT="~{d}{this_bam}" \
-      FASTQ=/dev/stdout \
-      INTERLEAVE=true \
-      NON_PF=true | \
-    /usr/gitc/~{this_bwa_commandline} /dev/stdin - 2> >(tee "~{d}{this_output_bam_basename}.shifted.bwa.stderr.log" >&2) | \
-    java -Xms5000m -jar /usr/gitc/picard.jar \
-      MergeBamAlignment \
-      VALIDATION_STRINGENCY=SILENT \
-      EXPECTED_ORIENTATIONS=FR \
-      ATTRIBUTES_TO_RETAIN=X0 \
-      ATTRIBUTES_TO_REMOVE=NM \
-      ATTRIBUTES_TO_REMOVE=MD \
-      ALIGNED_BAM=/dev/stdin \
-      UNMAPPED_BAM="~{d}{this_bam}" \
-      OUTPUT=mba.shifted.bam \
-      REFERENCE_SEQUENCE="~{d}{this_mt_shifted_cat_fasta}" \
-      PAIRED_RUN=true \
-      SORT_ORDER="unsorted" \
-      IS_BISULFITE_SEQUENCE=false \
-      ALIGNED_READS_ONLY=false \
-      CLIP_ADAPTERS=false \
-      MAX_RECORDS_IN_RAM=2000000 \
-      ADD_MATE_CIGAR=true \
-      MAX_INSERTIONS_OR_DELETIONS=-1 \
-      PRIMARY_ALIGNMENT_STRATEGY=MostDistant \
-      PROGRAM_RECORD_ID="bwamem" \
-      PROGRAM_GROUP_VERSION=$BWAVERSION \
-      PROGRAM_GROUP_COMMAND_LINE="~{this_bwa_commandline}" \
-      PROGRAM_GROUP_NAME="bwamem" \
-      UNMAPPED_READ_STRATEGY=COPY_TO_TAG \
-      ALIGNER_PROPER_PAIR_FLAGS=true \
-      UNMAP_CONTAMINANT_READS=true \
-      ADD_PG_TAG_TO_READS=false
 
-    java -Xms5000m -jar /usr/gitc/picard.jar \
-      MarkDuplicates \
-      INPUT=mba.shifted.bam \
-      OUTPUT=md.shifted.bam \
-      METRICS_FILE="~{d}{this_output_bam_basename}.shifted.metrics" \
-      VALIDATION_STRINGENCY=SILENT \
-      ~{"READ_NAME_REGEX=" + read_name_regex} \
-      OPTICAL_DUPLICATE_PIXEL_DISTANCE=2500 \
-      ASSUME_SORT_ORDER="queryname" \
-      CLEAR_DT="false" \
-      ADD_PG_TAG_TO_READS=false
+    if [ "~{single_end_duplicate_allow}" = true ]; then
+      java -Xms5000m -jar /usr/gitc/picard.jar \
+        SamToFastq \
+        INPUT="~{d}{this_bam}" \
+        FASTQ=/dev/stdout \
+        INTERLEAVE=true \
+        NON_PF=true | \
+      /usr/gitc/~{this_bwa_commandline} /dev/stdin - 2> >(tee "~{d}{this_output_bam_basename}.shifted.bwa.stderr.log" >&2) | \
+      java -Xms5000m -jar /usr/gitc/picard.jar \
+        MergeBamAlignment \
+        VALIDATION_STRINGENCY=SILENT \
+        EXPECTED_ORIENTATIONS=FR \
+        ATTRIBUTES_TO_RETAIN=X0 \
+        ATTRIBUTES_TO_REMOVE=NM \
+        ATTRIBUTES_TO_REMOVE=MD \
+        ATTRIBUTES_TO_REMOVE=RG \
+        ALIGNED_BAM=/dev/stdin \
+        UNMAPPED_BAM="~{d}{this_bam}" \
+        OUTPUT=md.shifted.bam \
+        REFERENCE_SEQUENCE="~{d}{this_mt_shifted_cat_fasta}" \
+        PAIRED_RUN=false \
+        SORT_ORDER="unsorted" \
+        IS_BISULFITE_SEQUENCE=false \
+        ALIGNED_READS_ONLY=false \
+        CLIP_ADAPTERS=false \
+        MAX_RECORDS_IN_RAM=2000000 \
+        ADD_MATE_CIGAR=true \
+        MAX_INSERTIONS_OR_DELETIONS=-1 \
+        PRIMARY_ALIGNMENT_STRATEGY=MostDistant \
+        PROGRAM_RECORD_ID="bwamem" \
+        PROGRAM_GROUP_VERSION=$BWAVERSION \
+        PROGRAM_GROUP_COMMAND_LINE="~{this_bwa_commandline}" \
+        PROGRAM_GROUP_NAME="bwamem" \
+        UNMAPPED_READ_STRATEGY=COPY_TO_TAG \
+        ALIGNER_PROPER_PAIR_FLAGS=true \
+        UNMAP_CONTAMINANT_READS=true \
+        ADD_PG_TAG_TO_READS=false
+
+    else
+      java -Xms5000m -jar /usr/gitc/picard.jar \
+        SamToFastq \
+        INPUT="~{d}{this_bam}" \
+        FASTQ=/dev/stdout \
+        INTERLEAVE=true \
+        NON_PF=true | \
+      /usr/gitc/~{this_bwa_commandline} /dev/stdin - 2> >(tee "~{d}{this_output_bam_basename}.shifted.bwa.stderr.log" >&2) | \
+      java -Xms5000m -jar /usr/gitc/picard.jar \
+        MergeBamAlignment \
+        VALIDATION_STRINGENCY=SILENT \
+        EXPECTED_ORIENTATIONS=FR \
+        ATTRIBUTES_TO_RETAIN=X0 \
+        ATTRIBUTES_TO_REMOVE=NM \
+        ATTRIBUTES_TO_REMOVE=MD \
+        ALIGNED_BAM=/dev/stdin \
+        UNMAPPED_BAM="~{d}{this_bam}" \
+        OUTPUT=mba.shifted.bam \
+        REFERENCE_SEQUENCE="~{d}{this_mt_shifted_cat_fasta}" \
+        PAIRED_RUN=true \
+        SORT_ORDER="unsorted" \
+        IS_BISULFITE_SEQUENCE=false \
+        ALIGNED_READS_ONLY=false \
+        CLIP_ADAPTERS=false \
+        MAX_RECORDS_IN_RAM=2000000 \
+        ADD_MATE_CIGAR=true \
+        MAX_INSERTIONS_OR_DELETIONS=-1 \
+        PRIMARY_ALIGNMENT_STRATEGY=MostDistant \
+        PROGRAM_RECORD_ID="bwamem" \
+        PROGRAM_GROUP_VERSION=$BWAVERSION \
+        PROGRAM_GROUP_COMMAND_LINE="~{this_bwa_commandline}" \
+        PROGRAM_GROUP_NAME="bwamem" \
+        UNMAPPED_READ_STRATEGY=COPY_TO_TAG \
+        ALIGNER_PROPER_PAIR_FLAGS=true \
+        UNMAP_CONTAMINANT_READS=true \
+        ADD_PG_TAG_TO_READS=false
+
+      java -Xms5000m -jar /usr/gitc/picard.jar \
+        MarkDuplicates \
+        INPUT=mba.shifted.bam \
+        OUTPUT=md.shifted.bam \
+        METRICS_FILE="~{d}{this_output_bam_basename}.shifted.metrics" \
+        VALIDATION_STRINGENCY=SILENT \
+        ~{"READ_NAME_REGEX=" + read_name_regex} \
+        OPTICAL_DUPLICATE_PIXEL_DISTANCE=2500 \
+        ASSUME_SORT_ORDER="queryname" \
+        CLEAR_DT="false" \
+        ADD_PG_TAG_TO_READS=false
+    fi
 
     java -Xms5000m -jar /usr/gitc/picard.jar \
       SortSam \
@@ -1910,6 +2008,7 @@ task MongoLiftoverVCFAndGetCoverage {
     File input_bam_shifted_ref_index
     File self_control_region_shifted_reference_interval_list
     File self_non_control_region_interval_list
+    Boolean single_end_duplicate_allow
 
     String self_suffix
     File HailLiftover
@@ -2035,6 +2134,11 @@ task MongoLiftoverVCFAndGetCoverage {
     echo $n_final_pass > "~{d}{this_sample}_n_final_pass.txt"
 
     echo "Now producing coverage file..."
+    if [ "~{single_end_duplicate_allow}" = true ]; then
+      export covmax=100000
+    else
+      export covmax=20000
+    fi
     java -jar /usr/gitc/picard.jar CollectHsMetrics \
       I="~{d}{this_self_bam}" \
       R="~{d}{this_self_fasta}" \
@@ -2042,7 +2146,7 @@ task MongoLiftoverVCFAndGetCoverage {
       O=non_control_region.metrics \
       TI="~{d}{this_self_non_control}" \
       BI="~{d}{this_self_non_control}" \
-      COVMAX=20000 \
+      COVMAX="~{d}{covmax}" \
       SAMPLE_SIZE=1
 
     java -jar /usr/gitc/picard.jar CollectHsMetrics \
@@ -2052,7 +2156,7 @@ task MongoLiftoverVCFAndGetCoverage {
       O=control_region_shifted.metrics \
       TI="~{d}{this_self_control}" \
       BI="~{d}{this_self_control}" \
-      COVMAX=20000 \
+      COVMAX="~{d}{covmax}" \
       SAMPLE_SIZE=1
 
     R --vanilla <<CODE
