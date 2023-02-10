@@ -1,6 +1,6 @@
 version 1.0
 
-import "https://raw.githubusercontent.com/rahulg603/mtSwirl/single_end/WDL/v2.5_MongoSwirl_Single/fullMitoPipeline_v2_5_Single.wdl" as MitochondriaPipeline_v2_5
+import "https://raw.githubusercontent.com/rahulg603/mtSwirl/single_end2/WDL/v2.5_MongoSwirl_Single/fullMitoPipeline_v2_5_Single.wdl" as MitochondriaPipeline_v2_5
 
 workflow MitochondriaPipelineWrapper {
 
