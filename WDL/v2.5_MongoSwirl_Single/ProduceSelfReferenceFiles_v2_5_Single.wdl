@@ -1,7 +1,7 @@
 version 1.0
 
-import "https://raw.githubusercontent.com/rahulg603/mtSwirl/master/WDL/v2.5_MongoSwirl_Single/LiftoverTools_v2_5_Single.wdl" as LiftoverTools_Single
-import "https://raw.githubusercontent.com/rahulg603/mtSwirl/master/WDL/v2.5_MongoSwirl_Single/MongoTasks_v2_5_Single.wdl" as MongoTasks_Single
+import "https://raw.githubusercontent.com/rahulg603/mtSwirl/single_end/WDL/v2.5_MongoSwirl_Single/LiftoverTools_v2_5_Single.wdl" as LiftoverTools_Single
+import "https://raw.githubusercontent.com/rahulg603/mtSwirl/single_end/WDL/v2.5_MongoSwirl_Single/MongoTasks_v2_5_Single.wdl" as MongoTasks_Single
 
 workflow ProduceSelfReferenceFiles {
   # Running bcftools consensus when an interval file was used upstream to subset the genome
