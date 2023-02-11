@@ -1444,7 +1444,7 @@ task MongoAlignToMtRegShiftedAndMetrics {
         ALIGNER_PROPER_PAIR_FLAGS=true \
         UNMAP_CONTAMINANT_READS=true \
         ADD_PG_TAG_TO_READS=false
-
+      echo "GENERATING EMPTY METRICS FILE SINCE WE ARE NOT REMOVING DUPLICATES"
       touch "~{d}{this_output_bam_basename}.metrics"
     else
       java -Xms5000m -jar /usr/gitc/picard.jar \
@@ -1555,6 +1555,7 @@ task MongoAlignToMtRegShiftedAndMetrics {
         ALIGNER_PROPER_PAIR_FLAGS=true \
         UNMAP_CONTAMINANT_READS=true \
         ADD_PG_TAG_TO_READS=false
+      echo "GENERATING EMPTY METRICS FILE SINCE WE ARE NOT REMOVING DUPLICATES"
       touch "~{d}{this_output_bam_basename}.shifted.metrics"
     else
       java -Xms5000m -jar /usr/gitc/picard.jar \
