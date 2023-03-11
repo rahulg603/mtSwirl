@@ -75,7 +75,8 @@ workflow MitochondriaPipeline {
 
     # If analyzing sparse reads from single-end approaches, one may want to
     # disable paired-end flags and allow duplicates -- enable this below
-    Boolean single_end_duplicate_allow = false
+    Boolean duplicate_allow = false
+    Boolean single_end = false
 
     #Docker and version arguments
     String gatk_version = "4.2.6.0"
@@ -128,7 +129,7 @@ workflow MitochondriaPipeline {
       mem = printreads_mem,
       n_cpu = n_cpu_subsetbam,
       preemptible_tries = preemptible_tries,
-      single_end_duplicate_allow = single_end_duplicate_allow
+      duplicate_allow = duplicate_allow
   }
 
   call AlignAndCallR1_Single.AlignAndCallR1 as AlignAndCallR1 {
@@ -199,7 +200,8 @@ workflow MitochondriaPipeline {
       unmapped_bam = SubsetBamToChrMAndRevert.unmapped_bam,
       sample_name = sample_name,
       suffix = self_ref_suffix,
-      single_end_duplicate_allow = single_end_duplicate_allow,
+      single_end = single_end,
+      duplicate_allow = duplicate_allow,
 
       mt_interval_list = ProduceSelfRefFiles.mt_interval_list_self,
 
@@ -267,7 +269,7 @@ workflow MitochondriaPipeline {
       input_bam_shifted_ref_index = AlignAndCallR2.mt_aligned_shifted_bai,
       self_control_region_shifted_reference_interval_list = ProduceSelfRefFiles.control_shifted_self,
       self_non_control_region_interval_list = ProduceSelfRefFiles.non_control_interval_self,
-      single_end_duplicate_allow = single_end_duplicate_allow,
+      duplicate_allow = duplicate_allow,
       
       ref_fasta = mt_fasta,
       ref_fasta_index = mt_fasta_index,

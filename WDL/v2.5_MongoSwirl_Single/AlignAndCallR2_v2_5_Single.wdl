@@ -51,7 +51,8 @@ workflow AlignAndCallR2 {
     Float? vaf_filter_threshold
     Float? f_score_beta
     Boolean compress_output_vcf
-    Boolean single_end_duplicate_allow
+    Boolean single_end
+    Boolean duplicate_allow
 
     Float? verifyBamID
     String hasContamination
@@ -77,7 +78,8 @@ workflow AlignAndCallR2 {
       input_bam = unmapped_bam,
       sample_base_name = sample_name,
       suffix = suffix,
-      single_end_duplicate_allow = single_end_duplicate_allow,
+      single_end = single_end,
+      duplicate_allow = duplicate_allow,
 
       mt = mt_self,
       mt_index = mt_self_index,
