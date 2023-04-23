@@ -1,16 +1,16 @@
 #!/bin/bash
 
 pip3 install gnomad
-git clone https://github.com/rahulg603/gnomad-mitochondria.git
+git clone https://github.com/rahulg603/mtSwirl.git
 git clone https://github.com/broadinstitute/gnomad_qc.git
 git clone https://github.com/broadinstitute/gnomad_methods.git
 mv gnomad_qc gnomad_qc_hold
 cd gnomad_qc_hold
 mv gnomad_qc ../
 cd ..
-mv gnomad-mitochondria gnomad_mitochondria_hold
-mv gnomad_mitochondria_hold/gnomad_mitochondria ./
-cd gnomad_mitochondria/pipeline/
+mv mtSwirl mtSwirl_hold
+mv mtSwirl_hold/mtSwirl ./
+cd mtSwirl/generate_mtdna_call_mt/dx/
 
 python dx_provision_sql.py --dx-init 220619_MitochondriaPipelineSwirl_v2_5_Multi_20k
 

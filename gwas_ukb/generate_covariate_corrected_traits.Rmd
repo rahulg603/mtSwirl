@@ -1,0 +1,272 @@
+---
+title: "`r sub(' .+','',file.info(knitr::current_input())$ctime, perl = T)`_make_final_covariates_files"
+author: "Rahul Gupta"
+date: "`r sub(' .+','',file.info(knitr::current_input())$ctime, perl = T)`"
+output: 
+  pdf_document:
+    number_sections: true
+    fig_width: 7
+    fig_height: 5
+---
+
+```{r wrapping, echo = F, include = F}
+library(knitr)
+library(formatR)
+hook_output = knit_hooks$get('output')
+knit_hooks$set(output = function(x, options) {
+  # this hook is used only when the linewidth option is not NULL
+  if (!is.null(n <- options$linewidth)) {
+    x = knitr:::split_lines(x)
+    # any lines wider than n should be wrapped
+    if (any(nchar(x) > n)) x = strwrap(x, width = n)
+    x = paste(x, collapse = '\n')
+  }
+  hook_output(x, options)
+})
+opts_chunk$set(tidy.opts=list(width.cutoff=85),
+               linewidth=85,
+               tidy=F)
+```
+
+```{r library, include=FALSE}
+prefix <- "/Volumes/rahul/"
+library(tidyverse)
+library(pheatmap)
+library(grid)
+library(gtable)
+source(paste0(prefix,'Proj_utilities/ukb_nmr_metabolomics_qc.R'))
+```
+
+```{r helpers}
+trim_array <- function(x) str_remove_all(x, '[\\[\\]\\\\\\"]')
+is_indel <- function(x) any(sapply(str_split_fixed(x, ',', 2), str_length)>1)
+parse_s <- function(vec) as.numeric(str_split_fixed(vec, '_', 4)[,1])
+binary_t <- function(vec, tf, ...) t.test(vec[tf], vec[!tf], ...)
+failed_flags <- c('weak_evidence', 'contamination', 'base_qual', 'strand_bias', 
+                  'artifact_prone_site', 'map_qual', 'position')
+z_vector <- function(vector, na.rm=T) (vector - mean(vector, na.rm=na.rm))/sd(vector, na.rm=na.rm)
+filter_variant_table <- function(table, suffix, keep_artifact_prone_site=F) {
+  if(!keep_artifact_prone_site) { failed_flags_this <- failed_flags }
+  else { failed_flags_this <- failed_flags[failed_flags != 'artifact_prone_site'] }
+  tf_fail <- str_detect(table[[paste0('FT', suffix)]], paste0(failed_flags_this, collapse='|'))
+  return(table[!tf_fail,])
+}
+# produces appropriate matrix with HL excluding samples with missing values (QC'd out)
+produce_allsamphl_matrix <- function(tab, variants) {
+  all_samples <- as.character(unique(tab$s))
+  mat <- matrix(data = 0, nrow = length(all_samples), 
+                ncol = length(variants), 
+                dimnames=list(all_samples,variants))
+  for(x in variants) {
+    matching_vars <- tab %>% filter(variant %in% x) %>% transmute(s=as.character(s), HL) %>%
+      mutate(HL = ifelse(HL >= 0.95, NA, HL))
+    mat[matching_vars$s,x] <- matching_vars$HL
+  }
+  mat %>%
+    as.data.frame() %>%
+    rownames_to_column('s') %>%
+    as_tibble() %>%
+    return()
+}
+```
+
+
+```{r import, message=F}
+sample_stat <- read_tsv(paste0(REF_DATA,'221012_filtered_ukb_tab_per_sample_stats.tsv'), 
+                        guess_max=200000) %>%
+  mutate(s=parse_s(s))
+proc_calls_loc <- paste0(REF_DATA,'filt_annotated_combined_processed_flat.tsv.bgz')
+ukb_calls_proc <- read_tsv(proc_calls_loc) %>% mutate(s=parse_s(s))
+ukb_homoplasmies <- ukb_calls_proc %>% filter(HL > 0.95) %>%
+  transmute(locus, alleles, variant, s=as.character(s), HL=HL, major_haplogroup, mtcn=mito_cn)
+ever_homoplasmic <- ukb_homoplasmies %>% filter(!duplicated(variant))
+```
+
+# Get variants
+
+```{r}
+tab_of_vars_het_blacklist <- ukb_calls_proc %>% 
+  filter(common_low_heteroplasmy, HL < 0.95, !is.na(HL)) %>% 
+  group_by(variant) %>% 
+  summarize(N = n()) %>% 
+  arrange(desc(N)) %>% filter(N > 500)
+```
+
+# Load blood phenotypes and other covariates
+
+```{r}
+nmr_covars <- ukb.nmr.import_covariates()
+blood_phenos <- read_tsv(paste0(REF_DATA, 'readable_blood_cell_traits.tsv'))
+to_keep_2 <- c('white_blood_cell_leukocyte_count', 'haematocrit_percentage', 'platelet_crit',
+               'monocyte_percentage', 'neutrophill_percentage', 'eosinophill_percentage',
+               'basophill_percentage','reticulocyte_percentage',
+               'high_light_scatter_reticulocyte_percentage', 'immature_reticulocyte_fraction', 'mean_corpuscular_volume',
+               'mean_reticulocyte_volume', 'mean_sphered_cell_volume', 'mean_platelet_thrombocyte_volume')
+technical_model_rhs <- paste0('assessment_centre + ns(draw_time_median, 5) + fasting_time + ',
+                              'ns(date_of_assessment_num, knots=SEASONAL_KNOTS) + month_of_assessment')
+overall_model_rhs <- paste0(technical_model_rhs, ' +', paste0(to_keep_2, collapse=' + '))
+samples_2006 <- nmr_covars %>% filter(final_month_category == 2006) %>% pull(s)
+```
+
+# mtCN
+
+## Produce final z-score filtered table
+
+```{r}
+data_for_corr <- full_join(sample_stat, nmr_covars) %>% 
+  full_join(blood_phenos) %>% filter(!s %in% samples_2006) %>% filter(!is.na(mtcn))
+for(x in to_keep_2) {
+  thismn <- mean(data_for_corr[[x]], na.rm=T)
+  thissd <- sd(data_for_corr[[x]], na.rm=T)
+  thisz <- (data_for_corr[[x]] - thismn)/thissd
+  data_for_corr[[x]] <- ifelse(abs(thisz) < 4, data_for_corr[[x]], NA)
+}
+```
+
+## Produce corrected phenotypes and haplogroups for mtCN
+
+```{r}
+summary(lm(paste0('log(mtcn) ~ ', paste0(to_keep_2, collapse=' + ')) , data=data_for_corr, na.action = na.exclude))$r.squared
+summary(lm(paste0('log(mtcn) ~ ', technical_model_rhs) , data=data_for_corr, na.action = na.exclude))$r.squared
+summary(lm(paste0('log(mtcn) ~ ', overall_model_rhs) , data=data_for_corr, na.action = na.exclude))$r.squared
+
+mod_mtcn <- lm(paste0('log(mtcn) ~ ', overall_model_rhs) , data=data_for_corr, na.action = na.exclude)
+summary(mod_mtcn)
+mod_mtcn_median <- lm(paste0('log(mtcn_median) ~ ', overall_model_rhs) , data=data_for_corr, na.action = na.exclude)
+summary(mod_mtcn_median)
+
+corrected_mtcn <- tibble(mtcn = residuals(mod_mtcn), 
+                         mtcn_median = residuals(mod_mtcn_median),
+                         raw_mtcn = log(data_for_corr$mtcn),
+                         raw_mtcn_median = log(data_for_corr$mtcn_median),
+                         s=data_for_corr$s) %>% 
+  filter(!is.na(mtcn) | !is.na(mtcn_median))
+
+write_tsv(corrected_mtcn[,c('s','mtcn','mtcn_median','raw_mtcn', 'raw_mtcn_median')], 
+          '221026_final_mtcn_corrected_raw_ukb.tsv')
+
+sstat_hap <- sample_stat %>% filter(!s %in% samples_2006)
+haplos_to_use <- table(sstat_hap$hap)[table(sstat_hap$hap) > 30]
+haplos_to_use
+
+s_for_haplos <- sstat_hap %>% filter(hap %in% names(haplos_to_use))
+mat <- model.matrix(mtcn~hap, data=s_for_haplos)
+haplo_covariates <- mat[,-1] %>% as_tibble() %>% mutate(s = s_for_haplos$s)
+
+write_tsv(haplo_covariates, '221027_haplo_covariates_for_mtcn.tsv')
+```
+
+# Variant calls
+
+## Make variables
+
+```{r}
+variants_hl <- tab_of_vars_het_blacklist$variant
+var_and_cn <- c(variants_hl,'log_mtCN')
+ordered_var_cn <- c(variants_hl[order(as.numeric(str_split_fixed(variants_hl, pattern = ':', 3)[,2]))], 'log_mtCN')
+filtered_ukb_calls_proc_no2006 <- ukb_calls_proc %>% 
+  filter(variant %in% variants_hl, !is.na(HL), HL < 0.95) %>%
+  filter(!s %in% samples_2006)
+allvars_table <- pivot_wider(filtered_ukb_calls_proc_no2006, id_cols=s, 
+                             names_from=variant, values_from=HL)
+full_tab_hl <- full_join(data_for_corr, allvars_table, by='s') %>% mutate(log_mtCN = log(mtcn))
+var_wide_tab_with_0s <- produce_allsamphl_matrix(ukb_calls_proc, variants=variants_hl) %>%
+  filter(!s %in% samples_2006)
+full_tab_hl_0s <- inner_join(data_for_corr,var_wide_tab_with_0s%>%mutate(s=as.numeric(s)), by='s')
+```
+
+## Output for HL
+
+```{r}
+alls <- tibble(s = ukb_calls_proc %>% filter(!s %in% samples_2006) %>% pull(s) %>% unique())
+data_for_corr_HL <- full_tab_hl %>% right_join(y = alls, by='s')
+corrected_backbone <- data_for_corr_HL %>% transmute(s)
+uncorrected_backbone <- data_for_corr_HL %>% transmute(s)
+for(vari in variants_hl)  {
+  mod_blood_hap <- lm(paste0('`', vari, '` ~ ', paste0(to_keep_2, collapse=' + ')) , 
+                      data=data_for_corr_HL, na.action = na.exclude)
+  this_name <-  paste0(str_replace_all(vari, ':|,', '_'), '_lowHLqc_bloodcorrected')
+  corrected_backbone[[this_name]] <- residuals(mod_blood_hap)
+  
+  this_name_uncorr <-  paste0(str_replace_all(vari, ':|,', '_'), '_lowHLqc')
+  uncorrected_backbone[[this_name_uncorr]] <- data_for_corr_HL[[vari]]
+}
+
+write_tsv(corrected_backbone, '221026_sensitivity_blood_hl_ukb.tsv')
+
+for_sens_blood <- corrected_backbone[,c('s', 'chrM_16093_T_C_lowHLqc_bloodcorrected',
+                                        'chrM_16183_A_AC_lowHLqc_bloodcorrected', 
+                                        'chrM_16182_A_ACC_lowHLqc_bloodcorrected')]
+for_sens_reg <- data_for_corr_HL[,c('s', 'chrM:16093:T,C','chrM:16183:A,AC','chrM:16182:A,ACC')]
+names(for_sens_reg) <- ifelse(names(for_sens_reg) != 's', paste0(str_replace_all(names(for_sens_reg), ':|,', '_'), '_lowHLqc'),'s')
+for_sens <- inner_join(for_sens_blood, for_sens_reg, by='s')
+write_tsv(for_sens, '221026_sensitivity_specificvars_blood_hl_ukb.tsv')
+
+corrected_backbone_tech <- data_for_corr_HL %>% transmute(s)
+for(vari in variants_hl)  {
+  mod_tech_hap <- lm(paste0('`', vari, '` ~ ', technical_model_rhs), 
+                     data=data_for_corr_HL, na.action = na.exclude)
+  this_name <-  paste0(str_replace_all(vari, ':|,', '_'), '_lowHLqc_technicalcorrected')
+  corrected_backbone_tech[[this_name]] <- residuals(mod_tech_hap)
+}
+write_tsv(corrected_backbone_tech, '221026_sensitivity_technical_hl_ukb.tsv')
+
+for_sens_tech <- corrected_backbone_tech[,c('s', 'chrM_567_A_ACCCCCC_lowHLqc_technicalcorrected')]
+for_sens_tech_reg <- data_for_corr_HL[,c('s', 'chrM:567:A,ACCCCCC')]
+names(for_sens_tech_reg) <- ifelse(names(for_sens_tech_reg) != 's', 
+                                   paste0(str_replace_all(names(for_sens_tech_reg), ':|,', '_'), 
+                                          '_lowHLqc'),'s')
+for_sens_t <- inner_join(for_sens_tech, for_sens_tech_reg, by='s')
+write_tsv(for_sens_t, '221026_sensitivity_specificvars_technical_hl_ukb.tsv')
+
+haplos_to_use <- table(sstat_hap$hap)[table(sstat_hap$hap) > 30]
+haplos_to_use
+
+s_for_haplos_var <- ukb_calls_proc %>% filter(!s %in% samples_2006) %>%
+  filter(hap %in% names(haplos_to_use)) %>% filter(!duplicated(s)) %>%
+  mutate(var1 = 1)
+mat_var <- model.matrix(var1~hap, data=s_for_haplos_var)
+haplo_covariates_var <- mat_var[,-1] %>% as_tibble() %>% mutate(s = s_for_haplos_var$s)
+
+write_tsv(haplo_covariates_var, '221027_haplo_covariates_for_variants.tsv')
+```
+
+## Output for case-control
+
+```{r}
+data_for_corr_caco <- full_tab_hl_0s %>% right_join(y = alls, by='s')
+caco_backbone <- data_for_corr_caco %>% transmute(s)
+for(vari in variants_hl)  {
+  this_name <-  paste0(str_replace_all(vari, ':|,', '_'), '_lowHLqc_caco')
+  caco_backbone[[this_name]] <- ifelse(is.na(full_tab_hl_0s[[vari]]), NA,
+                                       ifelse(full_tab_hl_0s[[vari]] > 0, 1, 0))
+}
+
+assess_caco_test <- c('chrM:16192:C,T', 'chrM:16179:CA,C', 'chrM:567:A,ACCCC')
+caco_for_assess <- caco_backbone[,c('s',paste0(str_replace_all(assess_caco_test, ':|,', '_'), '_lowHLqc_caco'))]
+names(caco_for_assess) <- ifelse(names(caco_for_assess) == 's', 's', paste0(names(caco_for_assess),'_sens_assess'))
+write_tsv(caco_for_assess,'221027_ukb_case_control_assess_sensitivity.tsv')
+blood_caco_test <- c('chrM:302:A,AC', 'chrM:302:A,ACC', 'chrM:302:A,ACCC')
+caco_for_blood <- caco_backbone[,c('s',paste0(str_replace_all(blood_caco_test, ':|,', '_'), '_lowHLqc_caco'))]
+names(caco_for_blood) <- ifelse(names(caco_for_blood) == 's', 's', paste0(names(caco_for_blood),'_sens_blood'))
+write_tsv(caco_for_blood, '221027_ukb_case_control_blood_sensitivity.tsv')
+
+## add on assesment center model
+s_for_assess_var <- s_for_haplos_var %>%
+  left_join(data_for_corr[,c('s','assessment_centre','draw_time_median','fasting_time','date_of_assessment_num','month_of_assessment')])
+mat_assess_var <- model.matrix.lm(formula(paste0('var1~',technical_model_rhs)), data=s_for_assess_var, na.action=NULL)
+haplo_assess_var <- mat_assess_var[,-1] %>% as_tibble() %>% mutate(s = s_for_assess_var$s)
+names(haplo_assess_var) <- str_replace(names(haplo_assess_var), 'ns\\(draw_time_median, 5\\)', 'draw_time_median_spline')
+names(haplo_assess_var) <- str_replace(names(haplo_assess_var), 
+                                       'ns\\(date_of_assessment_num, knots = SEASONAL_KNOTS\\)', 
+                                       'date_assess_spline')
+write_tsv(left_join(haplo_covariates_var,haplo_assess_var,by='s'), '221027_haplo_assess_for_variants.tsv')
+
+## add on blood model
+s_for_blood_var <- s_for_haplos_var %>% left_join(data_for_corr[,c('s',to_keep_2)])
+mat_blood_var <- model.matrix.lm(formula(paste0('var1~',paste0(to_keep_2, collapse='+'))), 
+                                  data=s_for_blood_var, na.action=NULL)
+haplo_blood_var <- mat_blood_var[,-1] %>% as_tibble() %>% mutate(s = s_for_blood_var$s)
+write_tsv(left_join(haplo_covariates_var,haplo_blood_var,by='s'), '221027_haplo_blood_for_variants.tsv')
+```
+

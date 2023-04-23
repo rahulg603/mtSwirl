@@ -7,8 +7,6 @@ import sys
 
 import sys
 sys.path.append('/home/jupyter/')
-sys.path.append('/home/rahul/')
-sys.path.append('/home/rahulgupta/')
 
 from collections import Counter
 from textwrap import dedent
@@ -198,7 +196,7 @@ def filter_by_hom_overlap(input_mt: hl.MatrixTable, keep_all_samples: bool, samp
 
 
 def filter_by_copy_number(
-    input_mt: hl.MatrixTable, keep_all_samples: bool = False
+    input_mt: hl.MatrixTable, keep_all_samples: bool = False, max_cn: int = 500
 ) -> hl.MatrixTable:
     """
     Calculate the mitochondrial copy number based on mean mitochondrial coverage and median nuclear coverage. Filter out samples with more extreme copy numbers.
@@ -223,13 +221,13 @@ def filter_by_copy_number(
         hl.agg.count_where(input_mt.mito_cn < 50)
     )
     n_removed_above_cn = input_mt.aggregate_cols(
-        hl.agg.count_where(input_mt.mito_cn > 500)
+        hl.agg.count_where(input_mt.mito_cn > max_cn)
     )
 
     if not keep_all_samples:
         # Remove samples with a mitochondrial copy number below 50 or greater than 500
         input_mt = input_mt.filter_cols(
-            (input_mt.mito_cn >= 50) & (input_mt.mito_cn <= 500)
+            (input_mt.mito_cn >= 50) & (input_mt.mito_cn <= max_cn)
         )
     input_mt = input_mt.filter_rows(hl.agg.any(input_mt.HL > 0))
 
@@ -1095,15 +1093,18 @@ def add_filter_annotations(
     return format_filters(input_mt), n_het_below_min_het_threshold
 
 
-def filter_genotypes(input_mt: hl.MatrixTable) -> hl.MatrixTable:
+def filter_genotypes(input_mt: hl.MatrixTable, pass_set: set = {}) -> hl.MatrixTable:
     """
     Set all genotype field values to missing if the variant is not "PASS" for that sample.
 
     :param input_mt: MatrixTable
     :return: MatrixTable with filtered genotype fields set to missing
     """
-    pass_expr = input_mt.FT == {"PASS"}
-
+    if len(pass_set) > 0:
+        pass_expr = (input_mt.FT == {"PASS"}) | input_mt.FT.is_subset(hl.literal(pass_set))
+    else:
+        pass_expr = input_mt.FT == {"PASS"}
+    
     input_mt = input_mt.annotate_entries(
         GT=hl.or_missing(pass_expr, input_mt.GT),
         DP=hl.or_missing(pass_expr, input_mt.DP),
@@ -1333,6 +1334,7 @@ def report_stats(
     n_removed_overlap: int,
     min_het_threshold: float = 0.10,
     min_hom_threshold: float = 0.95,
+    max_cn: int = 500
 ) -> None:
     """
     Generate output report with basic stats.
@@ -1370,7 +1372,7 @@ def report_stats(
         f"Number of samples removed because mitochondrial copy number below 50: {n_samples_below_cn}\n"
     )
     out_stats.write(
-        f"Number of samples removed because mitochondrial copy number above 500: {n_samples_above_cn}\n"
+        f"Number of samples removed because mitochondrial copy number above {str(max_cn)}: {n_samples_above_cn}\n"
     )
     out_stats.write(
         f'Number of genotypes filtered because "heteroplasmy_below_min_het_threshold": {n_het_below_min_het_threshold}\n\n'
@@ -1960,7 +1962,7 @@ def make_comma_delim(expr):
     return hl.literal(',').join(hl.map(hl.str, expr))
 
 
-def process_mt_for_flat_file_analysis(mt, skip_vep):
+def process_mt_for_flat_file_analysis(mt, skip_vep, allow_gt_fail):
     """ 
     Function to format the MT into high-yield fields used for downstream analysis.
     
@@ -2010,6 +2012,12 @@ def process_mt_for_flat_file_analysis(mt, skip_vep):
         raise ValueError('Any missing heteroplasmies at DP > 100 should not be passing in terms of FT.')
 
     ht = ht.annotate(AD_ref = ht.AD[0], AD_alt = ht.AD[1], FT = ht.FT.union(ht.filters)).drop('AD','filters')
+    ht = ht.annotate(F2R1_ref = ht.F2R1[0], F2R1_alt = ht.F2R1[1], F1R2_ref = ht.F1R2[0], F1R2_alt = ht.F1R2[1]).drop('F2R1','F1R2')
+    if 'AS_SB_TABLE' in ht.row:
+        ht = ht.annotate(FWD_ref = hl.if_else(hl.is_defined(ht.AS_SB_TABLE), hl.int32(ht.AS_SB_TABLE[0].split(',')[0]), hl.missing(hl.tint32)),
+                         FWD_alt = hl.if_else(hl.is_defined(ht.AS_SB_TABLE), hl.int32(ht.AS_SB_TABLE[1].split(',')[0]), hl.missing(hl.tint32)),
+                         REV_ref = hl.if_else(hl.is_defined(ht.AS_SB_TABLE), hl.int32(ht.AS_SB_TABLE[0].split(',')[1]), hl.missing(hl.tint32)),
+                         REV_alt = hl.if_else(hl.is_defined(ht.AS_SB_TABLE), hl.int32(ht.AS_SB_TABLE[1].split(',')[1]), hl.missing(hl.tint32)))
     ht = ht.annotate(FT = ht.FT.difference({'PASS'}), FT_LIFT = ht.FT_LIFT.difference({'PASS'}))
     
     # fail_gt should be a subset of missing_call
@@ -2020,7 +2028,7 @@ def process_mt_for_flat_file_analysis(mt, skip_vep):
                      missing_call = hl.is_missing(ht.HL)).key_by()
 
     # confirm that all fail_gt are missing a call
-    if ht.aggregate(hl.agg.count_where(ht.fail_gt & (~ht.missing_call))) > 0:
+    if not allow_gt_fail and ht.aggregate(hl.agg.count_where(ht.fail_gt & (~ht.missing_call))) > 0:
         raise ValueError('All samples where "GT_PASS" is not found should be missing a heteroplasmy call.')
 
     ht = ht.annotate(**{x: make_comma_delim(ht[x]) for x in ['FT','FT_LIFT','OriginalSelfRefAlleles','alleles','rsid']})
@@ -2040,6 +2048,7 @@ def main(args):  # noqa: D103
     gnomad_subset = args.subset_to_gnomad_release
     keep_all_samples = args.keep_all_samples
     run_vep = args.run_vep
+    max_cn = args.max_cn
 
     logger.info("Cutoff for homoplasmic variants is set to %.2f...", min_hom_threshold)
 
@@ -2134,7 +2143,7 @@ def main(args):  # noqa: D103
 
         logger.info("Checking for samples with low/high mitochondrial copy number...")
         mt, n_removed_below_cn, n_removed_above_cn = filter_by_copy_number(
-            mt, keep_all_samples
+            mt, keep_all_samples, max_cn
         )
 
         logger.info("Checking for contaminated samples...")
@@ -2189,7 +2198,8 @@ def main(args):  # noqa: D103
 
         # After this, passing GTs have "GT_PASS" rather than PASS in FT. Failing GTs have a reason for failure.
         # FT_LIFT also no longer has "PASS" and can have length 0.
-        mt = filter_genotypes(mt)
+        pass_set_filter_genotypes = {'strand_bias'} if args.allow_strand_bias else {}
+        mt = filter_genotypes(mt, pass_set=pass_set_filter_genotypes)
         # Add variant annotations such as AC, AF, and AN
         mt = mt.annotate_rows(**dict(generate_expressions(mt, min_hom_threshold)))
         # Checkpoint to help avoid Hail errors from large queries
@@ -2220,7 +2230,8 @@ def main(args):  # noqa: D103
             n_removed_above_cn,
             n_contaminated,
             n_het_below_min_het_threshold,
-            n_removed_overlap
+            n_removed_overlap,
+            max_cn=max_cn
         )
         report_stats(
             mt,
@@ -2230,11 +2241,12 @@ def main(args):  # noqa: D103
             n_removed_above_cn,
             n_contaminated,
             n_het_below_min_het_threshold,
-            n_removed_overlap
+            n_removed_overlap,
+            max_cn=max_cn
         )
 
     logger.info('Writing variants flat file for internal use...')
-    ht_for_output = process_mt_for_flat_file_analysis(mt, args.fully_skip_vep)
+    ht_for_output = process_mt_for_flat_file_analysis(mt, args.fully_skip_vep, args.allow_strand_bias)
     ht_for_output.export(annotated_mt_path.replace('.mt','_processed_flat.tsv.bgz'))
 
     logger.info("Writing ht...")
@@ -2350,6 +2362,12 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         '--sample-stats', required=True, help='Path to sample statistics file. Used to remove samples that show overlapping mtDNA homoplasmies.'
+    )
+    parser.add_argument(
+        '--max-cn', default=500, type=int, help='Allows specification of the maximum copy number filter. Only operates if keep-samples if false.'
+    )
+    parser.add_argument(
+        '--allow-strand-bias', action='store_true', help='In some cases, one may want to allow strand bias calls to persist in the final callset.'
     )
 
     args = parser.parse_args()
