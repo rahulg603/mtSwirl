@@ -16,19 +16,19 @@ export FILE_FAIL="mt_pipeline_single_2_5_failures.tsv" # samples that have faile
 
 #### INSTALL DEPENDENCIES
 pip install pyhocon
-git clone https://github.com/rahulg603/testing-mito-wdl.git
+git clone git clone https://github.com/rahulg603/mtSwirl.git
 
 
 #### DOWNLOAD DATA
-curl https://raw.githubusercontent.com/rahulg603/testing-mito-wdl/master/WDL/v2.5_MongoSwirl_Single/scatterWrapper_MitoPipeline_v2_5.wdl -o scatterWrapper_MitoPipeline_v2_5.wdl
-curl https://raw.githubusercontent.com/rahulg603/testing-mito-wdl/master/WDL/scripts/current_supporting_files/check_variant_bounds.R -o check_variant_bounds.R
-curl https://raw.githubusercontent.com/rahulg603/testing-mito-wdl/master/WDL/scripts/compatibilify_fa_intervals_consensus.R -o compatibilify_fa_intervals_consensus.R
-curl https://raw.githubusercontent.com/rahulg603/testing-mito-wdl/master/WDL/scripts/sontools.py -o jsontools.py
-curl https://raw.githubusercontent.com/rahulg603/testing-mito-wdl/master/WDL/scripts/merge_per_batch.py -o merge_per_batch.py
-curl https://raw.githubusercontent.com/rahulg603/testing-mito-wdl/master/WDL/scripts/check_overlapping_homoplasmies.R -o check_overlapping_homoplasmies.R
-curl https://raw.githubusercontent.com/rahulg603/testing-mito-wdl/master/WDL/scripts/fix_liftover.py -o fix_liftover.py
-curl https://raw.githubusercontent.com/rahulg603/testing-mito-wdl/master/WDL/files/NUMTv3_all385.hg38.interval_list -o NUMTv3_all385.hg38.interval_list
-curl https://raw.githubusercontent.com/rahulg603/testing-mito-wdl/master/WDL/files/input_allofus.json -o input_allofus.json
+curl https://raw.githubusercontent.com/rahulg603/mtSwirl/master/WDL/v2.5_MongoSwirl_Single/scatterWrapper_MitoPipeline_v2_5.wdl -o scatterWrapper_MitoPipeline_v2_5.wdl
+curl https://raw.githubusercontent.com/rahulg603/mtSwirl/master/WDL/scripts/check_variant_bounds.R -o check_variant_bounds.R
+curl https://raw.githubusercontent.com/rahulg603/mtSwirl/master/WDL/scripts/compatibilify_fa_intervals_consensus.R -o compatibilify_fa_intervals_consensus.R
+curl https://raw.githubusercontent.com/rahulg603/mtSwirl/master/WDL/scripts/jsontools.py -o jsontools.py
+curl https://raw.githubusercontent.com/rahulg603/mtSwirl/master/WDL/scripts/merge_per_batch.py -o merge_per_batch.py
+curl https://raw.githubusercontent.com/rahulg603/mtSwirl/master/WDL/scripts/check_overlapping_homoplasmies.R -o check_overlapping_homoplasmies.R
+curl https://raw.githubusercontent.com/rahulg603/mtSwirl/master/WDL/scripts/fix_liftover.py -o fix_liftover.py
+curl https://raw.githubusercontent.com/rahulg603/mtSwirl/master/WDL/files/NUMTv3_all385.hg38.interval_list -o NUMTv3_all385.hg38.interval_list
+curl https://raw.githubusercontent.com/rahulg603/mtSwirl/master/WDL/files/input_allofus.json -o input_allofus.json
 curl https://github.com/broadinstitute/cromwell/releases/download/77/cromwell-77.jar -o cromwell-77.jar -L
 curl https://github.com/broadinstitute/cromwell/releases/download/77/womtool-77.jar -o womtool-77.jar -L
 curl -s "https://get.sdkman.io" -o install_sdkman.sh
@@ -266,7 +266,7 @@ echo ""
 echo "Run the following command to track the progress of the various runs:"
 echo ""
 export success_file_pref="${outputFold}_prog_$(date +'%T' | sed 's|:|.|g')"
-echo "python testing-mito-wdl/generate_mtdna_call_mt/AoU/cromwell_run_monitor.py --run-folder ${outputFold} --sub-ids ordered_batch_ids.txt --sample-lists ${outputFold}/sample_list{}.txt --check-success --output ${success_file_pref}" | tee check_workflow_status.sh
+echo "python gnomad-mitochondria/gnomad_mitochondria/pipeline/cromwell_run_monitor.py --run-folder ${outputFold} --sub-ids ordered_batch_ids.txt --sample-lists ${outputFold}/sample_list{}.txt --check-success --output ${success_file_pref}" | tee check_workflow_status.sh
 echo ""
 echo "We have outputted this command in check_workflow_status.sh."
 echo ""
@@ -279,6 +279,6 @@ echo '#!/bin/bash' > compile_paths.sh
 export tsvPREF="${WORKSPACE_BUCKET}/tsv/${outputFold}"
 export htPREF="${WORKSPACE_BUCKET}/ht/${outputFold}"
 echo "gsutil cp ${success_file_pref}'*' ${tsvPREF}/" >> compile_paths.sh
-echo "python testing-mito-wdl/generate_mtdna_call_mt/AoU/aou_collate_tables.py --pipeline-output-path ${success_file_pref}.success.tsv --file-paths-table-flat-output ${tsvPREF}/tab_batch_file_paths.tsv --per-sample-stats-flat-output ${tsvPREF}/tab_per_sample_stats.tsv --file-paths-table-output ${htPREF}/tab_batch_file_paths.ht --per-sample-stats-output ${htPREF}/tab_per_sample_stats.ht" >> compile_paths.sh
-echo "python testing-mito-wdl/generate_mtdna_call_mt/AoU/aou_update_sample_database.py --new-paths tsv/${outputFold}/tab_batch_file_paths.tsv --new-stats tsv/${outputFold}/tab_per_sample_stats.tsv --new-failures tsv/${outputFold}/${success_file_pref}.failure.tsv" >> compile_paths.sh
+echo "python mtSwirl/generate_mtdna_call_mt/AoU/aou_collate_tables.py --pipeline-output-path ${success_file_pref}.success.tsv --file-paths-table-flat-output ${tsvPREF}/tab_batch_file_paths.tsv --per-sample-stats-flat-output ${tsvPREF}/tab_per_sample_stats.tsv --file-paths-table-output ${htPREF}/tab_batch_file_paths.ht --per-sample-stats-output ${htPREF}/tab_per_sample_stats.ht" >> compile_paths.sh
+echo "python mtSwirl/generate_mtdna_call_mt/AoU/aou_update_sample_database.py --new-paths tsv/${outputFold}/tab_batch_file_paths.tsv --new-stats tsv/${outputFold}/tab_per_sample_stats.tsv --new-failures tsv/${outputFold}/${success_file_pref}.failure.tsv" >> compile_paths.sh
 echo "" >> compile_paths.sh
