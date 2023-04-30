@@ -8,22 +8,6 @@ import "https://raw.githubusercontent.com/rahulg603/testing-mito-wdl/master/WDL/
 
 workflow MitochondriaPipeline {
 
-  # Version 2.6 of this pipeline reduces the number of outputs from MongoAlignToMtRegShiftedAndMetrics and
-  # enforces a SINGLE output from MongoProduceSelfReference.
-  #
-  # TODOS:
-  # - situation where there is a deletion that KOs the non-control region boundary
-  # - fields to drop: AS_FilterStatus, SB, POPAF, OCM? Maybe also phasing stuff: PGT, PID, PS
-  # - Run across 300 samples and compare to M2; try this again after removing calls affiliated with DP < 10 sites
-  # - What should we do with homoplasmies that are overlapping (deletions and SNPs)?
-  # - What should we do with the edge case in HG00452? Here we see that due to left-shifting we get a duplicate allele.
-  # - NOW GENERATED IDXSTATS STUFF -- we need to implement in single sample
-
-  # QUESTION:
-  # - sanity check: what about times when the deleted allele is different due to internal changes? Do fields stay the same? Or do we inherit ALT fields from the changed internal allele?
-  # - what do we do if there is a het deletion where the rightmost base deleted is the first base of an indel? Could be worth FAILing
-  # - we are now throwing o3ut reads that have missing mates -- is this ok?
-
   meta {
     description: "Takes in an hg38 bam or cram and outputs VCF of SNP/Indel calls on the mitochondria."
     allowNestedInputs: true
