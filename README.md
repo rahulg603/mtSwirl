@@ -10,19 +10,27 @@ This pipeline was released as part of the manuscript: `Nuclear genetic control o
 Gupta, R., Kanai, M., Durham, T. J., Tsuo, K., McCoy, J. G., Chinnery, P. F., Karczewski, K. J., Calvo, S. E., Neale, B. M., & Mootha, V. K. (2023). Nuclear genetic control of mtDNA copy number and heteroplasmy in humans. MedRxiv, 2023.01.19.23284696.
 ```
 
+### Individual-level data
+
 Individual level data corresponding to mtDNA copy number (before and after covariate correction) and the post-QC variant callset can be found:
 
 - For UKB, via the [UKB data showcase](https://biobank.ndph.ox.ac.uk/ukb/).
-- For AoU, as part of the `Nuclear genetic control of mtDNA copy number and heteroplasmy in humans` workspace. Note that controlled tier access is required to clone this workspace.
+- For AoU, as part of the `Nuclear genetic control of mtDNA copy number and heteroplasmy in humans` [workspace](https://workbench.researchallofus.org/workspaces/aou-rw-3273c7f0/nucleargeneticcontrolofmtdnacopynumberandheteroplasmyinhumans/data). Note that controlled tier access is required to clone this workspace.
+
+### Summary statistics
 
 Summary statistics from UKB are available:
 
-- Via GWAS Catalog, where we have uploaded summary statistics corresponding to our largest analysis for each phenotype, corresponding to cross-ancestry meta-analyses when performed or EUR when no other populations had sufficient N for GWAS.
+- Via GWAS Catalog under ID GCP000614, where we have uploaded summary statistics corresponding to our largest analysis for each phenotype, corresponding to cross-ancestry meta-analyses when performed or EUR when no other populations had sufficient N for GWAS.
 - On Google Cloud Platform, in the `gs://mito-wgs-public-2023` bucket. Please note that this is a requester pays bucket. This bucket also contains `ukb_b37_b38_lifted_variants.tsv.bgz`, which maps GRCh37 coordinates in the UKB data to GRCh38. The summary statistics on GCP correspond to the same data, but are stored using the [Pan UKB schema](https://pan.ukbb.broadinstitute.org/docs/per-phenotype-files#per-phenotype-files). These files contain the cross-ancestry meta-analysis as well as per-ancestry association statistics as well (and thus are more comprehensive than those on GWAS Catalog). More information on the schema is described in the `README_ukb.md` file located in the `gs://mito-wgs-public-2023` bucket.
 
-Summary statistics from AoU are available in the `Nuclear genetic control of mtDNA copy number and heteroplasmy in humans` workspace in the same format as UKB summary statistics found on GCP.
+Summary statistics from AoU are available in the `Nuclear genetic control of mtDNA copy number and heteroplasmy in humans` [workspace](https://workbench.researchallofus.org/workspaces/aou-rw-3273c7f0/nucleargeneticcontrolofmtdnacopynumberandheteroplasmyinhumans/data) in the same format as UKB summary statistics found on GCP. Note that controlled tier access is required to clone this workspace.
 
 See Supplementary table 1 for sample size information.
+
+### AllofUs workspace access
+
+Please note that at the time of writing, there is no mechanism by which custom workspaces in AoU can be made available to anyone with controlled tier access. Thus, we ask that in the interim, any users who desire to work with these data in AoU contact us to be added to the workspace. We are committed to making these data automatically available when this mechanism becomes available, and plan to beta-test this functionality when it is possible to do so.
 
 ## mtSwirl: Reference-aware quantification of mtDNA copy number and heteroplasmy using WGS
 
@@ -52,10 +60,12 @@ Run `dx_pipeline.sh` to run the merging pipeline.
 1. To generate sample statistics after QC (e.g., mtCN), use `process_sample_stats.py`
 2. To annotate the VCF MatrixTable, run QC, run VEP, and output a QC'd variant flat file, use `add_annotations.py`
 
-## Run GWAS in UKB
+## Genome-wide association study pipeline
+
+### UKB
 
 To run GWAS in UKB use the files in `gwas_ukb`. Using the outputs of QC, we run covariate correction with `generate_covariate_corrected_traits.Rmd` for mtCN (and for sensitivity analyses). To produce final heteroplasmy phenotypes, we use `produce_final_HL_traits.Rmd`. We use `saige_pan_ancestry_custom.py` to run SAIGE in UKB with `custom_load_custom_sumstats_into_mt.py` to combine results into an MT.
 
-## Run GWAS in AoU
+### AllofUs
 
 We use the files in `gwas_aou` to run GWAS in AoU. To produce custom PCs by recomputing them per-ancestry, we use `run_per_ancestry_pca.py`. We run `aou_run_full_hl_gwas.py` to run the GWAS.
