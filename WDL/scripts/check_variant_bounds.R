@@ -146,7 +146,7 @@ if(length(args) != 3) {
 nuc_vcf <- read_vcf(args[1])
 
 ## If there are no variants, then skip this whole thing and output the original VCF
-if (nrow(nuc_vcf) == 0) {
+if (nrow(nuc_vcf[[1]]) == 0) {
   print('No variant calls found.')
   write_vcf(nuc_vcf[[1]], nuc_vcf[[2]], args[3])
 
