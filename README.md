@@ -15,7 +15,7 @@ Gupta, R., Kanai, M., Durham, T. J., Tsuo, K., McCoy, J. G., Chinnery, P. F., Ka
 
 Individual level data corresponding to mtDNA copy number (before and after covariate correction) and the post-QC variant callset can be found:
 
-- For UKB, via the [UKB data showcase](https://biobank.ndph.ox.ac.uk/ukb/).
+- For UKB, via the [UKB data showcase](https://biobank.ndph.ox.ac.uk/ukb/) (note that final data return is currently in process).
 - For AoU, as part of the `Nuclear genetic control of mtDNA copy number and heteroplasmy in humans` [workspace](https://workbench.researchallofus.org/workspaces/aou-rw-3273c7f0/nucleargeneticcontrolofmtdnacopynumberandheteroplasmyinhumans/data). Note that controlled tier access is required to clone this workspace.
 
 ### Summary statistics
