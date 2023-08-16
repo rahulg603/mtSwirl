@@ -5,10 +5,10 @@ This repo contains pipeline files for the reference-aware mtSwirl pipeline as we
 
 ## Citation and data
 
-This pipeline was released as part of the manuscript: `Nuclear genetic control of mitochondrial DNA copy number and heteroplasmy in humans`, which can be found on [Nature](https://www.nature.com/articles/s41586-023-06426-5). If you use these resources in your work, please cite as `Gupta et al. 2023 Nature`:
+This pipeline was released as part of the manuscript: `Nuclear genetic control of mitochondrial DNA copy number and heteroplasmy in humans`, which can be found at [Nature](https://www.nature.com/articles/s41586-023-06426-5). If you use these resources in your work, please cite as `Gupta et al. 2023 Nature`:
 
 ```
-Gupta, R., Kanai, M., Durham, T. J., Tsuo, K., McCoy, J. G., Chinnery, P. F., Karczewski, K. J., Calvo, S. E., Neale, B. M., & Mootha, V. K. (2023). Nuclear genetic control of mtDNA copy number and heteroplasmy in humans. Nature, in press. https://doi.org/10.1038/s41586-023-06426-5.
+Gupta, R., et al. Nuclear genetic control of mtDNA copy number and heteroplasmy in humans. Nature, in press. https://doi.org/10.1038/s41586-023-06426-5.
 ```
 
 ### Individual-level data
