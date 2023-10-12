@@ -20,15 +20,15 @@ git clone git clone https://github.com/rahulg603/mtSwirl.git
 
 
 #### DOWNLOAD DATA
-curl https://raw.githubusercontent.com/rahulg603/mtSwirl/master/WDL/v2.5_MongoSwirl_Single/scatterWrapper_MitoPipeline_v2_5.wdl -o scatterWrapper_MitoPipeline_v2_5.wdl
-curl https://raw.githubusercontent.com/rahulg603/mtSwirl/master/WDL/scripts/check_variant_bounds.R -o check_variant_bounds.R
-curl https://raw.githubusercontent.com/rahulg603/mtSwirl/master/WDL/scripts/compatibilify_fa_intervals_consensus.R -o compatibilify_fa_intervals_consensus.R
-curl https://raw.githubusercontent.com/rahulg603/mtSwirl/master/WDL/scripts/jsontools.py -o jsontools.py
-curl https://raw.githubusercontent.com/rahulg603/mtSwirl/master/WDL/scripts/merge_per_batch.py -o merge_per_batch.py
-curl https://raw.githubusercontent.com/rahulg603/mtSwirl/master/WDL/scripts/check_overlapping_homoplasmies.R -o check_overlapping_homoplasmies.R
-curl https://raw.githubusercontent.com/rahulg603/mtSwirl/master/WDL/scripts/fix_liftover.py -o fix_liftover.py
-curl https://raw.githubusercontent.com/rahulg603/mtSwirl/master/WDL/files/NUMTv3_all385.hg38.interval_list -o NUMTv3_all385.hg38.interval_list
-curl https://raw.githubusercontent.com/rahulg603/mtSwirl/master/WDL/files/input_allofus.json -o input_allofus.json
+curl https://raw.githubusercontent.com/WEHI-ResearchComputing/mtSwirl/master/WDL/v2.5_MongoSwirl_Single/scatterWrapper_MitoPipeline_v2_5.wdl -o scatterWrapper_MitoPipeline_v2_5.wdl
+curl https://raw.githubusercontent.com/WEHI-ResearchComputing/mtSwirl/master/WDL/scripts/check_variant_bounds.R -o check_variant_bounds.R
+curl https://raw.githubusercontent.com/WEHI-ResearchComputing/mtSwirl/master/WDL/scripts/compatibilify_fa_intervals_consensus.R -o compatibilify_fa_intervals_consensus.R
+curl https://raw.githubusercontent.com/WEHI-ResearchComputing/mtSwirl/master/WDL/scripts/jsontools.py -o jsontools.py
+curl https://raw.githubusercontent.com/WEHI-ResearchComputing/mtSwirl/master/WDL/scripts/merge_per_batch.py -o merge_per_batch.py
+curl https://raw.githubusercontent.com/WEHI-ResearchComputing/mtSwirl/master/WDL/scripts/check_overlapping_homoplasmies.R -o check_overlapping_homoplasmies.R
+curl https://raw.githubusercontent.com/WEHI-ResearchComputing/mtSwirl/master/WDL/scripts/fix_liftover.py -o fix_liftover.py
+curl https://raw.githubusercontent.com/WEHI-ResearchComputing/mtSwirl/master/WDL/files/NUMTv3_all385.hg38.interval_list -o NUMTv3_all385.hg38.interval_list
+curl https://raw.githubusercontent.com/WEHI-ResearchComputing/mtSwirl/master/WDL/files/input_allofus.json -o input_allofus.json
 curl https://github.com/broadinstitute/cromwell/releases/download/77/cromwell-77.jar -o cromwell-77.jar -L
 curl https://github.com/broadinstitute/cromwell/releases/download/77/womtool-77.jar -o womtool-77.jar -L
 curl -s "https://get.sdkman.io" -o install_sdkman.sh
