@@ -70,6 +70,17 @@ task MongoSubsetBamToChrMAndRevert {
     ~{if force_manual_download then "gsutil " + requester_pays_prefix + " cp ~{d}{this_bai} bamfile.cram.crai" else ""}
     ~{if force_manual_download then "this_bam=bamfile.cram" else ""}
     ~{if force_manual_download then "this_bai=bamfile.cram.crai" else ""}
+
+    /usr/bin/samtools-1.9/samtools \
+      idxstats \
+      "~{d}{this_bam}" \
+      --threads ~{nthreads} \
+      2>&1 > "~{d}{this_sample}.stats.tsv"
+
+    gatk CollectQualityYieldMetrics \
+      -I "~{d}{this_bam}" \
+      ~{"-R " + ref_fasta} \
+      -O "~{d}{this_sample}.yield_metrics.txt"
     
     gatk --java-options "-Xmx~{command_mem}m" PrintReads \
       ~{"-R " + ref_fasta} \
@@ -167,6 +178,8 @@ task MongoSubsetBamToChrMAndRevert {
     File duplicate_metrics = "out/~{sample_name}.duplicate.metrics"
     Int reads_dropped = read_int("out/~{sample_name}.ct_failed.txt")
     Int mean_coverage = read_int("out/~{sample_name}.mean_coverage.txt")
+    File idxstats_metrics = "out/~{sample_name}.stats.tsv"
+    File yield_metrics = "out/~{sample_name}.yield_metrics.txt
   }
 }
 
