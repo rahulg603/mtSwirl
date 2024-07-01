@@ -16,7 +16,7 @@ export FILE_FAIL="mt_pipeline_single_2_5_failures.tsv" # samples that have faile
 
 #### INSTALL DEPENDENCIES
 pip install pyhocon
-git clone git clone https://github.com/rahulg603/mtSwirl.git
+git clone https://github.com/rahulg603/mtSwirl.git
 
 
 #### DOWNLOAD DATA
