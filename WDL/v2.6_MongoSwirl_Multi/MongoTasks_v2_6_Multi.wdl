@@ -64,25 +64,25 @@ task MongoSubsetBam {
       process_sample() {
       i=$1
 
-      this_bam="${bams[i]}"
-      this_bai="${bais[i]}"
-      this_sample=out/"${sampleNames[i]}"
+      this_bam="~{d}{bams[i]}"
+      this_bai="~{d}{bais[i]}"
+      this_sample=out/"~{d}{sampleNames[i]}"
 
-      ~{if force_manual_download then "gsutil " + requester_pays_prefix + " cp ${this_bam} bamfile.cram" else ""}
-      ~{if force_manual_download then "gsutil " + requester_pays_prefix + " cp ${this_bai} bamfile.cram.crai" else ""}
+      ~{if force_manual_download then "gsutil " + requester_pays_prefix + " cp ~{d}{this_bam} bamfile.cram" else ""}
+      ~{if force_manual_download then "gsutil " + requester_pays_prefix + " cp ~{d}{this_bai} bamfile.cram.crai" else ""}
       ~{if force_manual_download then "this_bam=bamfile.cram" else ""}
       ~{if force_manual_download then "this_bai=bamfile.cram.crai" else ""}
 
       set +e
-      SAMERR=$(/usr/bin/samtools-1.9/samtools idxstats "${this_bam}" --threads ~{nthreads} 2>&1 > "${this_sample}.stats.tsv")
+      SAMERR=$(/usr/bin/samtools-1.9/samtools idxstats "~{d}{this_bam}" --threads ~{nthreads} 2>&1 > "~{d}{this_sample}.stats.tsv")
       thisexit=$?
       set -e
 
       SAMERRFAIL=$(echo $SAMERR | grep 'samtools idxstats: failed to process \".*.cram\"$' | wc -l | sed 's/^ *//g')
-      echo "${sampleNames[i]}: samtools exited with status ${thisexit}. Match status was ${SAMERRFAIL}."
+      echo "~{d}{sampleNames[i]}: samtools exited with status ~{d}{thisexit}. Match status was ~{d}{SAMERRFAIL}."
 
       if [ $thisexit -eq 0 ] && [ $SAMERRFAIL -eq 0 ]; then
-        /usr/bin/samtools-1.9/samtools flagstat "${this_bam}" --threads ~{nthreads} > "${this_sample}.flagstat.pre.txt"
+        /usr/bin/samtools-1.9/samtools flagstat "~{d}{this_bam}" --threads ~{nthreads} > "~{d}{this_sample}.flagstat.pre.txt"
 
         gatk --java-options "-Xmx~{command_mem}m" PrintReads \
           ~{"-R " + ref_fasta} \
@@ -93,28 +93,28 @@ task MongoSubsetBam {
           --read-filter MateUnmappedAndUnmappedReadFilter \
           ~{"--gcs-project-for-requester-pays " + requester_pays_project} \
           ~{if force_manual_download then '-I bamfile.cram --read-index bamfile.cram.crai' else "-I ${this_bam} --read-index ${this_bai}"} \
-          -O "${this_sample}.bam"
+          -O "~{d}{this_sample}.bam"
 
         python ~{JsonTools} \
         --path out/jsonout.json \
-        --set samples="${sampleNames[i]}" \
-          subset_bam="${this_sample}.bam" \
-          subset_bai="${this_sample}.bai" \
-          idxstats_metrics="${this_sample}.stats.tsv" \
-          flagstat_pre_metrics="${this_sample}.flagstat.pre.txt"
+        --set samples="~{d}{sampleNames[i]}" \
+          subset_bam="~{d}{this_sample}.bam" \
+          subset_bai="~{d}{this_sample}.bai" \
+          idxstats_metrics="~{d}{this_sample}.stats.tsv" \
+          flagstat_pre_metrics="~{d}{this_sample}.flagstat.pre.txt"
       elif [ $thisexit -eq 1 ] && [ $SAMERRFAIL -eq 1 ]; then
-        echo "Samtools exited with status ${thisexit} and ${SAMERR}."
-        echo "Thus, sample ${sampleNames[i]} is skipped."
+        echo "Samtools exited with status ~{d}{thisexit} and ~{d}{SAMERR}."
+        echo "Thus, sample ~{d}{sampleNames[i]} is skipped."
       else
-        echo "ERROR: samtools exited with the failure (match ${SAMERRFAIL}): ${SAMERR}."
-        echo "ERROR: samtools exited with the exit status: ${thisexit}"
-        exit "${thisexit}"
+        echo "ERROR: samtools exited with the failure (match ~{d}{SAMERRFAIL}): ~{d}{SAMERR}."
+        echo "ERROR: samtools exited with the exit status: ~{d}{thisexit}"
+        exit "~{d}{thisexit}"
       fi
       }
 
       export -f process_sample
       export sampleNames bams bais
-      parallel -j "${num_cores}" process_sample ::: "${!sampleNames[@]}"
+      parallel -j "~{d}{num_cores}" process_sample ::: "~{d}{!sampleNames[@]}"
   >>>
   runtime {
     memory: machine_mem + " GB"
