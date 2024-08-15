@@ -8,127 +8,129 @@ version 1.0
 # - Run test on large sample to prove that this pipeline still works
 
 task MongoSubsetBam {
-    # Specific to multisample analysis, we now skip samples that fail samtools idxstats in a specific way.
-    # This is the only stage where samples can be skipped.
-    input {
-        Array[File] input_bam
-        Array[File] input_bai
-        Array[String] sample_name
-        
-        File? mt_interval_list
-        File? nuc_interval_list
-        String? contig_name
-        String? requester_pays_project
-        File? ref_fasta
-        File? ref_fasta_index
-        File? ref_dict
-
-        File? gatk_override
-        String? gatk_docker_override
-        String gatk_version
-        File JsonTools
-
-        # runtime
-        Boolean force_manual_download # will download using gsutil cp
-        Int? mem
-        Int? n_cpu
-        Int? preemptible_tries
-    }
-
-    Float ref_size = if defined(ref_fasta) then size(ref_fasta, "GB") + size(ref_fasta_index, "GB") + size(ref_dict, "GB") else 0
-    Int addl_size = ceil((55 * length(sample_name)) / 1000)
-    Int disk_size = ceil(ref_size) + ceil(size(input_bam,'GB')) + 20 + addl_size
-    Int machine_mem = select_first([mem, 4])
-    Int command_mem = (machine_mem * 1000) - 500
-    Int nthreads = select_first([n_cpu,1])-1
-    String requester_pays_prefix = (if defined(requester_pays_project) then "-u " else "") + select_first([requester_pays_project, ""])
-
-    String d = "$" # a trick to get ${} indexing in bash to work in Cromwell
-
-    meta {
-        description: "Subsets a whole genome bam to just Mitochondria reads in parallel."
-    }
-    parameter_meta {
-        ref_fasta: "Reference is only required for cram input. If it is provided ref_fasta_index and ref_dict are also required."
-    }
-
-    command <<<
-        set -e
-        export GATK_LOCAL_JAR=~{default="/root/gatk.jar" gatk_override}
-
-        sampleNames=('~{sep="' '" sample_name}')
-        bams=('~{sep="' '" input_bam}')
-        bais=('~{sep="' '" input_bai}')
-        mkdir out
-
-        seq 0 $((${#sampleNames[@]}-1)) | parallel --jobs ~{nthreads} '
-            i={};
-            this_bam="~{d}{bams[i]}"
-            this_bai="~{d}{bais[i]}"
-            this_sample=out/"~{d}{sampleNames[i]}"
-
-            ~{if force_manual_download then "gsutil " + requester_pays_prefix + " cp ~{d}{this_bam} bamfile.cram" else ""}
-            ~{if force_manual_download then "gsutil " + requester_pays_prefix + " cp ~{d}{this_bai} bamfile.cram.crai" else ""}
-            ~{if force_manual_download then "this_bam=bamfile.cram" else ""}
-            ~{if force_manual_download then "this_bai=bamfile.cram.crai" else ""}
-
-            set +e
-            SAMERR=$(/usr/bin/samtools-1.9/samtools idxstats "~{d}{this_bam}" --threads ~{nthreads} 2>&1 > "~{d}{this_sample}.stats.tsv")
-            thisexit=$?
-            set -e
-
-            SAMERRFAIL=$(echo $SAMERR | grep "samtools idxstats: failed to process \"*.cram\"" | wc -l | sed "s/^ *//g")
-            echo "~{d}{sampleNames[i]}: samtools exited with status ~{d}{thisexit}. Match status was ~{d}{SAMERRFAIL}."
-
-            if [ $thisexit -eq 0 ] && [ $SAMERRFAIL -eq 0 ]; then
-                /usr/bin/samtools-1.9/samtools flagstat "~{d}{this_bam}" --threads ~{nthreads} > "~{d}{this_sample}.flagstat.pre.txt"
-
-                gatk --java-options "-Xmx~{command_mem}m" PrintReads \
-                    ~{"-R " + ref_fasta} \
-                    ~{"-L " + mt_interval_list} \
-                    ~{"-L " + nuc_interval_list} \
-                    ~{"-L " + contig_name} \
-                    --read-filter MateOnSameContigOrNoMappedMateReadFilter \
-                    --read-filter MateUnmappedAndUnmappedReadFilter \
-                    ~{"--gcs-project-for-requester-pays " + requester_pays_project} \
-                    ~{if force_manual_download then "-I bamfile.cram --read-index bamfile.cram.crai" else "-I ~{d}{this_bam} --read-index ~{d}{this_bai}"} \
-                    -O "~{d}{this_sample}.bam"
-
-                python ~{JsonTools} \
-                    --path out/jsonout.json \
-                    --set samples="~{d}{sampleNames[i]}" \
-                    subset_bam="~{d}{this_sample}.bam" \
-                    subset_bai="~{d}{this_sample}.bai" \
-                    idxstats_metrics="~{d}{this_sample}.stats.tsv" \
-                    flagstat_pre_metrics="~{d}{this_sample}.flagstat.pre.txt"
-            elif [ $thisexit -eq 1 ] && [ $SAMERRFAIL -eq 1 ]; then
-                echo "Samtools exited with status ~{d}{thisexit} and ~{d}{SAMERR}."
-                echo "Thus, sample ~{d}{sampleNames[i]} is skipped."
-            else
-                echo "ERROR: samtools exited with the failure (match ~{d}{SAMERRFAIL}): ~{d}{SAMERR}."
-                echo "ERROR: samtools exited with the exit status: ~{d}{thisexit}"
-                exit "~{d}{thisexit}"
-            fi
-        '
-    >>>
+  input {
+    Array[File] input_bam
+    Array[File] input_bai
+    Array[String] sample_name
     
-    runtime {
-        memory: machine_mem + " GB"
-        disks: "local-disk " + disk_size + " HDD"
-        docker: select_first([gatk_docker_override, "us.gcr.io/broad-gatk/gatk:"+gatk_version])
-        preemptible: select_first([preemptible_tries, 5])
-        cpu: select_first([n_cpu,1])
-        dx_instance_type: "mem1_ssd1_v2_x8"
+    File? mt_interval_list
+    File? nuc_interval_list
+    String? contig_name
+    String? requester_pays_project
+    File? ref_fasta
+    File? ref_fasta_index
+    File? ref_dict
+
+    File? gatk_override
+    String? gatk_docker_override
+    String gatk_version
+    File JsonTools
+
+    Boolean force_manual_download 
+    Int? mem
+    Int? n_cpu
+    Int? preemptible_tries
+  }
+
+  Float ref_size = if defined(ref_fasta) then size(ref_fasta, "GB") + size(ref_fasta_index, "GB") + size(ref_dict, "GB") else 0
+  Int addl_size = ceil((55 * length(sample_name)) / 1000)
+  Int disk_size = ceil(ref_size) + ceil(size(input_bam,'GB')) + 20 + addl_size
+  Int machine_mem = select_first([mem, 4])
+  Int command_mem = (machine_mem * 1000) - 500
+  Int nthreads = select_first([n_cpu,1])-1
+  String requester_pays_prefix = (if defined(requester_pays_project) then "-u " else "") + select_first([requester_pays_project, ""])
+
+  String d = "$" 
+
+  meta {
+    description: "Subsets a whole genome bam to just Mitochondria reads in parallel"
+  }
+
+  parameter_meta {
+    ref_fasta: "Reference is only required for cram input. If it is provided ref_fasta_index and ref_dict are also required."
+  }
+
+  command <<<
+    set -e
+    export GATK_LOCAL_JAR=~{default="/root/gatk.jar" gatk_override}
+
+    sampleNames=('~{sep="' '" sample_name}')
+    bams=('~{sep="' '" input_bam}')
+    bais=('~{sep="' '" input_bai}')
+    mkdir out
+
+    function process_sample() {
+      i=$1
+      this_bam="~{d}{bams[i]}"
+      this_bai="~{d}{bais[i]}"
+      this_sample=out/"~{d}{sampleNames[i]}"
+
+      ~{if force_manual_download then "gsutil " + requester_pays_prefix + " cp ~{d}{this_bam} bamfile_$i.cram" else ""}
+      ~{if force_manual_download then "gsutil " + requester_pays_prefix + " cp ~{d}{this_bai} bamfile_$i.cram.crai" else ""}
+      ~{if force_manual_download then "this_bam=bamfile_$i.cram" else ""}
+      ~{if force_manual_download then "this_bai=bamfile_$i.cram.crai" else ""}
+
+      set +e
+      SAMERR=$(/usr/bin/samtools-1.9/samtools idxstats "~{d}{this_bam}" --threads ~{nthreads} 2>&1 > "~{d}{this_sample}.stats.tsv")
+      thisexit=$?
+      set -e
+
+      SAMERRFAIL=$(echo $SAMERR | grep 'samtools idxstats: failed to process \".*.cram\"$' | wc -l | sed 's/^ *//g')
+      echo "~{d}{sampleNames[i]}: samtools exited with status ~{d}{thisexit}. Match status was ~{d}{SAMERRFAIL}."
+
+      if [ $thisexit -eq 0 ] && [ $SAMERRFAIL -eq 0 ]; then
+
+        /usr/bin/samtools-1.9/samtools flagstat "~{d}{this_bam}" --threads ~{nthreads} > "~{d}{this_sample}.flagstat.pre.txt"
+
+        gatk --java-options "-Xmx~{command_mem}m" PrintReads \
+          ~{"-R " + ref_fasta} \
+          ~{"-L " + mt_interval_list} \
+          ~{"-L " + nuc_interval_list} \
+          ~{"-L " + contig_name} \
+          --read-filter MateOnSameContigOrNoMappedMateReadFilter \
+          --read-filter MateUnmappedAndUnmappedReadFilter \
+          ~{"--gcs-project-for-requester-pays " + requester_pays_project} \
+          ~{if force_manual_download then '-I bamfile_$i.cram --read-index bamfile_$i.cram.crai' else "-I ~{d}{this_bam} --read-index ~{d}{this_bai}"} \
+          -O "~{d}{this_sample}.bam"
+
+        python ~{JsonTools} \
+        --path out/jsonout.json \
+        --set samples="~{d}{sampleNames[i]}" \
+          subset_bam="~{d}{this_sample}.bam" \
+          subset_bai="~{d}{this_sample}.bai" \
+          idxstats_metrics="~{d}{this_sample}.stats.tsv" \
+          flagstat_pre_metrics="~{d}{this_sample}.flagstat.pre.txt"
+      
+      elif [ $thisexit -eq 1 ] && [ $SAMERRFAIL -eq 1 ]; then
+        echo "Samtools exited with status ~{d}{thisexit} and ~{d}{SAMERR}."
+        echo "Thus, sample ~{d}{sampleNames[i]} is skipped."
+      else
+        echo "ERROR: samtools exited with the failure (match ~{d}{SAMERRFAIL}): ~{d}{SAMERR}."
+        echo "ERROR: samtools exited with the exit status: ~{d}{thisexit}"
+        exit "~{d}{thisexit}"
+      fi
     }
 
-    output {
-        Object obj_out = read_json("out/jsonout.json")
-        Array[String] samples = obj_out.samples
-        Array[File] subset_bam = obj_out.subset_bam
-        Array[File] subset_bai = obj_out.subset_bai
-        Array[File] idxstats_metrics = obj_out.idxstats_metrics
-        Array[File] flagstat_pre_metrics = obj_out.flagstat_pre_metrics
-    }
+    export -f process_sample
+    parallel process_sample ::: "${!sampleNames[@]}"
+  >>>
+
+  runtime {
+    memory: machine_mem + " GB"
+    disks: "local-disk " + disk_size + " HDD"
+    docker: select_first([gatk_docker_override, "us.gcr.io/broad-gatk/gatk:"+gatk_version])
+    preemptible: select_first([preemptible_tries, 5])
+    cpu: select_first([n_cpu,1])
+  }
+
+  output {
+    Object obj_out = read_json("out/jsonout.json")
+    Array[String] samples = obj_out.samples
+    Array[File] subset_bam = obj_out.subset_bam
+    Array[File] subset_bai = obj_out.subset_bai
+    Array[File] idxstats_metrics = obj_out.idxstats_metrics
+    Array[File] flagstat_pre_metrics = obj_out.flagstat_pre_metrics
+  }
 }
 
 task MongoProcessBamAndRevert {
@@ -184,8 +186,9 @@ task MongoProcessBamAndRevert {
     bams=('~{sep="' '" subset_bam}')
     bais=('~{sep="' '" subset_bai}')
     mkdir out
-    
+
     for i in "~{d}{!sampleNames[@]}"; do
+
       this_bam="~{d}{bams[i]}"
       this_bai="~{d}{bais[i]}"
       this_flagstat="~{d}{flagstats[i]}"
