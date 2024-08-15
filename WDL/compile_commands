@@ -1,0 +1,8 @@
+#!/bin/bash
+# must be in this directory the whole time, printtree is relative 
+
+java -jar ../../wdlTools-0.17.17.jar printTree v2.6_MongoSwirl_Multi/fullMitoPipeline_v2_6_Multi.wdl 
+
+java -jar ../../wdlTools-0.17.17.jar check v2.6_MongoSwirl_Multi/fullMitoPipeline_v2_6_Multi.wdl
+
+java -jar dxCompiler-2.11.6.jar compile v2.6_MongoSwirl_Multi/fullMitoPipeline_v2_6_Multi.wdl -project project-GbqfBQ8Jg52pv4zyq1fZJB9G -folder /workflows/parallelized_MitochondriaPipelineSwirl_v2.6_Multi/ -f
