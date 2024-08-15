@@ -1,10 +1,10 @@
 version 1.0
 
-import "https://raw.githubusercontent.com/rahulg603/testing-mito-wdl/master/WDL/v2.6_MongoSwirl_Multi/AlignAndCallR1_v2_6_Multi.wdl" as AlignAndCallR1_Multi
-import "https://raw.githubusercontent.com/rahulg603/testing-mito-wdl/master/WDL/v2.6_MongoSwirl_Multi/AlignAndCallR2_v2_6_Multi.wdl" as AlignAndCallR2_Multi
-import "https://raw.githubusercontent.com/rahulg603/testing-mito-wdl/master/WDL/v2.6_MongoSwirl_Multi/LiftoverTools_v2_6_Multi.wdl" as LiftoverTools_Multi
-import "https://raw.githubusercontent.com/rahulg603/testing-mito-wdl/master/WDL/v2.6_MongoSwirl_Multi/ProduceSelfReferenceFiles_v2_6_Multi.wdl" as ProduceSelfReferenceFiles_Multi
-import "https://raw.githubusercontent.com/rahulg603/testing-mito-wdl/master/WDL/v2.6_MongoSwirl_Multi/MongoTasks_v2_6_Multi.wdl" as MongoTasks_Multi
+import "https://raw.githubusercontent.com/gnchau/mtSwirl/master/WDL/v2.6_MongoSwirl_Multi/AlignAndCallR2_v1_6_M" as AlignAndCallR1_Multi
+import "https://raw.githubusercontent.com/gnchau/mtSwirl/master/WDL/v2.6_MongoSwirl_Multi/AlignAndCallR2_v2_6_M" as AlignAndCallR2_Multi
+import "https://raw.githubusercontent.com/gnchau/mtSwirl/master/WDL/v2.6_MongoSwirl_Multi/LiftoverTools_v2_6_Multi.wdl" as LiftoverTools_Multi
+import "https://raw.githubusercontent.com/gnchau/mtSwirl/master/WDL/v2.6_MongoSwirl_Multi/ProduceSelfReferenceFiles_v2_6_Multi.wdl" as ProduceSelfReferenceFiles_Multi
+import "https://raw.githubusercontent.com/gnchau/mtSwirl/master/WDL/v2.6_MongoSwirl_Multi/MongoTasks_v2_6_Multi.wdl" as MongoTasks_Multi
 
 workflow MitochondriaPipeline {
 
