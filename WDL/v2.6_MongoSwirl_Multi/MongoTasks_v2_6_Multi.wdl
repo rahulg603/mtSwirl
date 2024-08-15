@@ -46,7 +46,7 @@ task MongoSubsetBam {
     String d = "$" # a trick to get ${} indexing in bash to work in Cromwell
 
     meta {
-        description: "Subsets a whole genome bam to just Mitochondria reads"
+        description: "Subsets a whole genome bam to just Mitochondria reads in parallel."
     }
     parameter_meta {
         ref_fasta: "Reference is only required for cram input. If it is provided ref_fasta_index and ref_dict are also required."
@@ -60,8 +60,8 @@ task MongoSubsetBam {
         bams=('~{sep="' '" input_bam}')
         bais=('~{sep="' '" input_bai}')
         mkdir out
-      
-        seq 0 $((${sampleNames[@]}-1)) | parallel --jobs ~{nthreads} '
+
+        seq 0 $((${#sampleNames[@]}-1)) | parallel --jobs ~{nthreads} '
             i={};
             this_bam="~{d}{bams[i]}"
             this_bai="~{d}{bais[i]}"
@@ -118,6 +118,7 @@ task MongoSubsetBam {
         docker: select_first([gatk_docker_override, "us.gcr.io/broad-gatk/gatk:"+gatk_version])
         preemptible: select_first([preemptible_tries, 5])
         cpu: select_first([n_cpu,1])
+        dx_instance_type: "mem1_ssd1_v2_x8"
     }
 
     output {
@@ -183,9 +184,8 @@ task MongoProcessBamAndRevert {
     bams=('~{sep="' '" subset_bam}')
     bais=('~{sep="' '" subset_bai}')
     mkdir out
-
+    
     for i in "~{d}{!sampleNames[@]}"; do
-
       this_bam="~{d}{bams[i]}"
       this_bai="~{d}{bais[i]}"
       this_flagstat="~{d}{flagstats[i]}"
