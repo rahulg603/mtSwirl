@@ -60,8 +60,8 @@ task ParallelMongoSubsetBam {
       local this_bai=~{sep="' '" input_bai}
       local this_sample=~{sep="' '" sample_name}
 
-      this_bam=$(echo $this_bam | cut -d' ' -f$((idx+1)))
-      this_bai=$(echo $this_bai | cut -d' ' -f$((idx+1)))
+      this_bam=~{d}(echo $this_bam | cut -d' ' -f$((idx+1)))
+      this_bai=~{d}(echo $this_bai | cut -d' ' -f$((idx+1)))
       this_sample=$(echo $this_sample | cut -d' ' -f$((idx+1)))
 
       this_sample="out/$this_sample"
