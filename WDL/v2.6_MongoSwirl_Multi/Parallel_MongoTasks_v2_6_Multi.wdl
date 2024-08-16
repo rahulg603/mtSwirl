@@ -7,7 +7,7 @@ version 1.0
 # Todo:
 # - Run test on large sample to prove that this pipeline still works
 
-workflow ParallelMongoSubsetBam {
+task ParallelMongoSubsetBam {
   input {
     Array[File] input_bam
     Array[File] input_bai
@@ -32,157 +32,114 @@ workflow ParallelMongoSubsetBam {
     Int? preemptible_tries
   }
 
-  scatter (idx in range(length(input_bam))) {
-    call MongoSubsetBam {
-      input:
-        input_bam = [input_bam[idx]],
-        input_bai = [input_bai[idx]],
-        sample_name = [sample_name[idx]],
-        mt_interval_list = mt_interval_list,
-        nuc_interval_list = nuc_interval_list,
-        contig_name = contig_name,
-        requester_pays_project = requester_pays_project,
-        ref_fasta = ref_fasta,
-        ref_fasta_index = ref_fasta_index,
-        ref_dict = ref_dict,
-        gatk_override = gatk_override,
-        gatk_docker_override = gatk_docker_override,
-        gatk_version = gatk_version,
-        JsonTools = JsonTools,
-        force_manual_download = force_manual_download,
-        mem = mem,
-        n_cpu = n_cpu,
-        preemptible_tries = preemptible_tries
-    }
+  Float ref_size = if defined(ref_fasta) then size(ref_fasta, "GB") + size(ref_fasta_index, "GB") + size(ref_dict, "GB") else 0
+  Int addl_size = ceil((55 * length(sample_name)) / 1000)
+  Int disk_size = ceil(ref_size) + ceil(size(input_bam,'GB')) + 20 + addl_size
+  Int machine_mem = select_first([mem, 4])
+  Int command_mem = (machine_mem * 1000) - 500
+  Int nthreads = select_first([n_cpu,1])-1
+  String requester_pays_prefix = (if defined(requester_pays_project) then "-u " else "") + select_first([requester_pays_project, ""])
+  String d = "$" # a stupid trick to get ${} indexing in bash to work in Cromwell
+  
+  meta {
+    description: "Subsets a whole genome bam to just Mitochondria reads in parallel"
   }
-  runtime {
-        dx_instance_type: "mem1_ssd1_v2_x8"
-    }
-  output {
-    Object obj_out = read_json("out/jsonout.json")
-    Array[String] samples = flatten(MongoSubsetBam.samples)
-    Array[File] subset_bam = flatten(MongoSubsetBam.subset_bam)
-    Array[File] subset_bai = flatten(MongoSubsetBam.subset_bai)
-    Array[File] idxstats_metrics = flatten(MongoSubsetBam.idxstats_metrics)
-    Array[File] flagstat_pre_metrics = flatten(MongoSubsetBam.flagstat_pre_metrics)
+  parameter_meta {
+    ref_fasta: "Reference is only required for cram input. If it is provided ref_fasta_index and ref_dict are also required."
   }
-}
 
-task MongoSubsetBam {
-  input {
-    File input_bam
-    File input_bai
-    String sample_name
-    
-    File? mt_interval_list
-    File? nuc_interval_list
-    String? contig_name
-    String? requester_pays_project
-    File? ref_fasta
-    File? ref_fasta_index
-    File? ref_dict
+  command <
+    set -e
+    export GATK_LOCAL_JAR=~{default="/root/gatk.jar" gatk_override}
 
-    File? gatk_override
-    String? gatk_docker_override
-    String gatk_version
-    File JsonTools
+    mkdir out
 
-    # runtime
-    Boolean force_manual_download # will download using gsutil cp
-    Int? mem
-    Int? n_cpu
-    Int? preemptible_tries
-    }
+    process_sample() {
+      local idx=$1
+      local this_bam=~{sep="' '" input_bam}
+      local this_bai=~{sep="' '" input_bai}
+      local this_sample=~{sep="' '" sample_name}
 
-    Float ref_size = if defined(ref_fasta) then size(ref_fasta, "GB") + size(ref_fasta_index, "GB") + size(ref_dict, "GB") else 0
-    Int addl_size = ceil((55 * length(sample_name)) / 1000)
-    Int disk_size = ceil(ref_size) + ceil(size(input_bam,'GB')) + 20 + addl_size
-    Int machine_mem = select_first([mem, 4])
-    Int command_mem = (machine_mem * 1000) - 500
-    Int nthreads = select_first([n_cpu,1])-1
-    String requester_pays_prefix = (if defined(requester_pays_project) then "-u " else "") + select_first([requester_pays_project, ""])
+      this_bam=$(echo $this_bam | cut -d' ' -f$((idx+1)))
+      this_bai=$(echo $this_bai | cut -d' ' -f$((idx+1)))
+      this_sample=$(echo $this_sample | cut -d' ' -f$((idx+1)))
 
-    String d = "$" # a stupid trick to get ${} indexing in bash to work in Cromwell
-    
-    meta {
-        description: "Subsets a whole genome bam to just Mitochondria reads"
-    }
-    parameter_meta {
-        ref_fasta: "Reference is only required for cram input. If it is provided ref_fasta_index and ref_dict are also required."
-    }
+      this_sample="out/$this_sample"
 
-    command <<<
-        set -e
-        export GATK_LOCAL_JAR=~{default="/root/gatk.jar" gatk_override}
+      ~{if force_manual_download then "gsutil " + requester_pays_prefix + " cp $this_bam bamfile_$idx.cram" else ""}
+      ~{if force_manual_download then "gsutil " + requester_pays_prefix + " cp $this_bai bamfile_$idx.cram.crai" else ""}
+      ~{if force_manual_download then "this_bam=bamfile_$idx.cram" else ""}
+      ~{if force_manual_download then "this_bai=bamfile_$idx.cram.crai" else ""}
 
-        mkdir out
+      set +e
+      SAMERR=$(/usr/bin/samtools-1.9/samtools idxstats "$this_bam" --threads ~{nthreads} 2>&1 > "${this_sample}.stats.tsv")
+      thisexit=$?
+      set -e
 
-        this_bam="~{d}{input_bam}"
-        this_bai="~{d}{input_bai}"
-        this_sample=out/"~{d}{sample_name}"
+      SAMERRFAIL=$(echo $SAMERR | grep 'samtools idxstats: failed to process \".*.cram\"$' | wc -l | sed 's/^ *//g')
+      echo "${this_sample}: samtools exited with status ${thisexit}. Match status was ${SAMERRFAIL}."
 
-        ~{if force_manual_download then "gsutil " + requester_pays_prefix + " cp ~{input_bam} bamfile.cram" else ""}
-        ~{if force_manual_download then "gsutil " + requester_pays_prefix + " cp ~{input_bai} bamfile.cram.crai" else ""}
-        ~{if force_manual_download then "this_bam=bamfile.cram" else ""}
-        ~{if force_manual_download then "this_bai=bamfile.cram.crai" else ""}
-
-        set +e
-        SAMERR=$(/usr/bin/samtools-1.9/samtools idxstats "~{d}{this_bam}" --threads ~{nthreads} 2>&1 > "~{d}{this_sample}.stats.tsv")
-        thisexit=$?
-        set -e
-
-        SAMERRFAIL=$(echo $SAMERR | grep 'samtools idxstats: failed to process \".*.cram\"$' | wc -l | sed 's/^ *//g')
-        echo "~{d}{sampleNames[i]}: samtools exited with status ~{d}{thisexit}. Match status was ~{d}{SAMERRFAIL}."
-
-        if [ $thisexit -eq 0 ] && [ $SAMERRFAIL -eq 0 ]; then
-
-        /usr/bin/samtools-1.9/samtools flagstat "~{d}{this_bam}" --threads ~{nthreads} > "~{d}{this_sample}.flagstat.pre.txt"
+      if [ $thisexit -eq 0 ] && [ $SAMERRFAIL -eq 0 ]; then
+        /usr/bin/samtools-1.9/samtools flagstat "$this_bam" --threads ~{nthreads} > "${this_sample}.flagstat.pre.txt"
 
         gatk --java-options "-Xmx~{command_mem}m" PrintReads \
-            ~{"-R " + ref_fasta} \
-            ~{"-L " + mt_interval_list} \
-            ~{"-L " + nuc_interval_list} \
-            ~{"-L " + contig_name} \
-            --read-filter MateOnSameContigOrNoMappedMateReadFilter \
-            --read-filter MateUnmappedAndUnmappedReadFilter \
-            ~{"--gcs-project-for-requester-pays " + requester_pays_project} \
-            ~{if force_manual_download then '-I bamfile.cram --read-index bamfile.cram.crai' else "-I ~{d}{this_bam} --read-index ~{d}{this_bai}"} \
-            -O "~{d}{this_sample}.bam"
+          ~{"-R " + ref_fasta} \
+          ~{"-L " + mt_interval_list} \
+          ~{"-L " + nuc_interval_list} \
+          ~{"-L " + contig_name} \
+          --read-filter MateOnSameContigOrNoMappedMateReadFilter \
+          --read-filter MateUnmappedAndUnmappedReadFilter \
+          ~{"--gcs-project-for-requester-pays " + requester_pays_project} \
+          -I "$this_bam" --read-index "$this_bai" \
+          -O "${this_sample}.bam"
 
-
-        python ~{JsonTools} \
-            --path out/jsonout.json \
-            --set samples="~{sample_name}" \
-            subset_bam="~{this_sample}.bam" \
-            subset_bai="~{this_sample}.bai" \
-            idxstats_metrics="~{this_sample}.stats.tsv" \
-            flagstat_pre_metrics="~{this_sample}.flagstat.pre.txt"
-
-        elif [ $thisexit -eq 1 ] && [ $SAMERRFAIL -eq 1 ]; then
-        echo "Samtools exited with status ~{d}{thisexit} and ~{d}{SAMERR}."
-        echo "Thus, sample ~{d}{sampleNames[i]} is skipped."
-        else
-            echo "ERROR: samtools exited with the failure (match ~{d}{SAMERRFAIL}): ~{d}{SAMERR}."
-            echo "ERROR: samtools exited with the exit status: ~{d}{thisexit}"
-            exit "~{d}{thisexit}"
-        fi
-
-        done
-        >>>
-    runtime {
-        memory: machine_mem + " GB"
-        disks: "local-disk " + disk_size + " HDD"
-        docker: select_first([gatk_docker_override, "us.gcr.io/broad-gatk/gatk:"+gatk_version])
-        preemptible: select_first([preemptible_tries, 5])
-        cpu: select_first([2, n_cpu])
+        echo "${this_sample}" >> out/samples.txt
+        echo "${this_sample}.bam" >> out/subset_bam.txt
+        echo "${this_sample}.bai" >> out/subset_bai.txt
+        echo "${this_sample}.stats.tsv" >> out/idxstats_metrics.txt
+        echo "${this_sample}.flagstat.pre.txt" >> out/flagstat_pre_metrics.txt
+      
+      elif [ $thisexit -eq 1 ] && [ $SAMERRFAIL -eq 1 ]; then
+        echo "Samtools exited with status ${thisexit} and ${SAMERR}."
+        echo "Thus, sample ${this_sample} is skipped."
+      else
+        echo "ERROR: samtools exited with the failure (match ${SAMERRFAIL}): ${SAMERR}."
+        echo "ERROR: samtools exited with the exit status: ${thisexit}"
+        exit "${thisexit}"
+      fi
     }
-    output {
-        String samples = read_json("out/jsonout.json").samples
-        File subset_bam = read_json("out/jsonout.json").subset_bam
-        File subset_bai = read_json("out/jsonout.json").subset_bai
-        File idxstats_metrics = read_json("out/jsonout.json").idxstats_metrics
-        File flagstat_pre_metrics = read_json("out/jsonout.json").flagstat_pre_metrics
-    }
+
+    export -f process_sample
+
+    seq 0 $((~{length(input_bam)}-1)) | parallel -j ~{select_first([n_cpu,1])} process_sample
+
+    # move combining step outside of the loop
+    python ~{JsonTools} \
+    --path out/jsonout.json \
+    --set samples="$(cat out/samples.txt)" \
+      subset_bam="$(cat out/subset_bam.txt)" \
+      subset_bai="$(cat out/subset_bai.txt)" \
+      idxstats_metrics="$(cat out/idxstats_metrics.txt)" \
+      flagstat_pre_metrics="$(cat out/flagstat_pre_metrics.txt)"
+  >>>
+
+  runtime {
+    memory: machine_mem + " GB"
+    disks: "local-disk " + disk_size + " HDD"
+    docker: select_first([gatk_docker_override, "us.gcr.io/broad-gatk/gatk:"+gatk_version])
+    preemptible: select_first([preemptible_tries, 5])
+    cpu: select_first([n_cpu,1])
+    dx_instance_type: "mem1_ssd1_v2_x8"
+  }
+
+  output {
+    Object obj_out = read_json("out/jsonout.json")
+    Array[String] samples = read_json("out/jsonout.json").samples
+    Array[File] subset_bam = read_json("out/jsonout.json").subset_bam
+    Array[File] subset_bai = read_json("out/jsonout.json").subset_bai
+    Array[File] idxstats_metrics = read_json("out/jsonout.json").idxstats_metrics
+    Array[File] flagstat_pre_metrics = read_json("out/jsonout.json").flagstat_pre_metrics
+  }
 }
 
 task MongoProcessBamAndRevert {
