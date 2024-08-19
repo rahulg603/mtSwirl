@@ -69,7 +69,6 @@ workflow MitochondriaPipeline {
     String genomes_cloud_docker
     String haplochecker_docker
     String gatk_samtools_docker
-    String gnu_parallel_docker
 
     #Optional runtime arguments
     Int? printreads_mem
@@ -105,7 +104,6 @@ workflow MitochondriaPipeline {
       gatk_override = gatk_override,
       gatk_docker_override = gatk_samtools_docker,
       gatk_version = gatk_version,
-      gnu_parallel_docker = gnu_parallel_docker,
       force_manual_download = force_manual_download,
       mem = printreads_mem,
       JsonTools = JsonTools,
@@ -127,7 +125,6 @@ workflow MitochondriaPipeline {
       ref_dict = ref_dict,
       gatk_override = gatk_override,
       gatk_docker_override = gatk_docker_override,
-      gnu_parallel = gnu_parallel_docker,
       gatk_version = gatk_version,
       read_length = max_read_length,
       skip_restore_hardclips = skip_restore_hardclips,
