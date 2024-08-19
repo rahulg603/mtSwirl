@@ -53,6 +53,7 @@ task ParallelMongoSubsetBam {
     export GATK_LOCAL_JAR=~{default="/root/gatk.jar" gatk_override}
 
     mkdir out
+    touch out/lockfile.lock
 
     process_sample() {
       local idx=$1
@@ -107,22 +108,21 @@ task ParallelMongoSubsetBam {
         echo "ERROR: samtools exited with the exit status: ${thisexit}"
         exit "${thisexit}"
       fi
+      {
+          flock 200
+          python ~{JsonTools} \
+          --path out/jsonout.json \
+          --set samples="~{d}{sampleNames[i]}" \
+            subset_bam="~{d}{this_sample}.bam" \
+            subset_bai="~{d}{this_sample}.bai" \
+            idxstats_metrics="~{d}{this_sample}.stats.tsv" \
+            flagstat_pre_metrics="~{d}{this_sample}.flagstat.pre.txt"
+      } 200>"out/lockfile.lock"
     }
 
     export -f process_sample
-
-    seq 0 $((~{length(input_bam)}-1)) | parallel -j ~{select_first([n_cpu,1])} process_sample
-
-    # move combining step outside of the loop
-    python ~{JsonTools} \
-    --path out/jsonout.json \
-    --set samples="$(cat out/samples.txt)" \
-      subset_bam="$(cat out/subset_bam.txt)" \
-      subset_bai="$(cat out/subset_bai.txt)" \
-      idxstats_metrics="$(cat out/idxstats_metrics.txt)" \
-      flagstat_pre_metrics="$(cat out/flagstat_pre_metrics.txt)"
+    seq 0 $((~{length(input_bam)}-1)) | xargs -n 1 -P ~{select_first([n_cpu,1])} -I {} bash -c 'custom_function "$@"' _ {}
   >>>
-
   runtime {
     memory: machine_mem + " GB"
     disks: "local-disk " + disk_size + " HDD"
