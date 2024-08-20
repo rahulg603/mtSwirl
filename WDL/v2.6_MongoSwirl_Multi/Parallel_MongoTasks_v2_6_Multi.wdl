@@ -121,7 +121,7 @@ task ParallelMongoSubsetBam {
     }
 
     export -f process_sample
-    seq 0 $((~{length(input_bam)}-1)) | xargs -n 1 -P ~{select_first([n_cpu,1])} -I {} bash -c 'custom_function "$@"' _ {}
+    seq 0 $((~{length(input_bam)}-1)) | xargs -n 1 -P ~{select_first([n_cpu,1])} -I {} bash -c 'process_sample "$@"' _ {}
   >>>
   runtime {
     memory: machine_mem + " GB"
@@ -131,7 +131,6 @@ task ParallelMongoSubsetBam {
     cpu: select_first([n_cpu,1])
     dx_instance_type: "mem1_ssd1_v2_x8"
   }
-
   output {
     Object obj_out = read_json("out/jsonout.json")
     Array[String] samples = read_json("out/jsonout.json").samples
