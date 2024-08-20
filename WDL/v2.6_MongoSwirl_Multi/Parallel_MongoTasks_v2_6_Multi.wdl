@@ -131,13 +131,14 @@ task ParallelMongoSubsetBam {
     cpu: select_first([n_cpu,1])
     dx_instance_type: "mem1_ssd1_v2_x8"
   }
+  
   output {
     Object obj_out = read_json("out/jsonout.json")
-    Array[String] samples = read_json("out/jsonout.json").samples
-    Array[File] subset_bam = read_json("out/jsonout.json").subset_bam
-    Array[File] subset_bai = read_json("out/jsonout.json").subset_bai
-    Array[File] idxstats_metrics = read_json("out/jsonout.json").idxstats_metrics
-    Array[File] flagstat_pre_metrics = read_json("out/jsonout.json").flagstat_pre_metrics
+    Array[String] samples = obj_out.samples
+    Array[File] subset_bam = obj_out.subset_bam
+    Array[File] subset_bai = obj_out.subset_bai
+    Array[File] idxstats_metrics = obj_out.idxstats_metrics
+    Array[File] flagstat_pre_metrics = obj_out.flagstat_pre_metrics
   }
 }
 
