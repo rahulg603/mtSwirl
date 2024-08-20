@@ -36,7 +36,8 @@ task ParallelMongoSubsetBam {
   Int addl_size = ceil((55 * length(sample_name)) / 1000)
   Int disk_size = ceil(ref_size) + ceil(size(input_bam,'GB')) + 20 + addl_size
   Int machine_mem = select_first([mem, 4])
-  Int command_mem = (machine_mem * 1000) - 500
+  # adjusted so we dont OOM
+  Int command_mem = (machine_mem * 1000) - 1000
   Int nthreads = select_first([n_cpu,1])-1
   String requester_pays_prefix = (if defined(requester_pays_project) then "-u " else "") + select_first([requester_pays_project, ""])
   String d = "$" # a stupid trick to get ${} indexing in bash to work in Cromwell
@@ -91,15 +92,19 @@ task ParallelMongoSubsetBam {
           --read-filter MateOnSameContigOrNoMappedMateReadFilter \
           --read-filter MateUnmappedAndUnmappedReadFilter \
           ~{"--gcs-project-for-requester-pays " + requester_pays_project} \
-          -I "$this_bam" --read-index "$this_bai" \
-          -O "${this_sample}.bam"
-
-        echo "${this_sample}" >> out/samples.txt
-        echo "${this_sample}.bam" >> out/subset_bam.txt
-        echo "${this_sample}.bai" >> out/subset_bai.txt
-        echo "${this_sample}.stats.tsv" >> out/idxstats_metrics.txt
-        echo "${this_sample}.flagstat.pre.txt" >> out/flagstat_pre_metrics.txt
-      
+          ~{if force_manual_download then '-I bamfile.cram --read-index bamfile.cram.crai' else "-I ~{d}{this_bam} --read-index ~{d}{this_bai}"} \
+          -O "~{d}{this_sample}.bam"
+          echo "~{d}{sampleNames[i]}: completed gatk. Writing to json output."
+          {
+            flock 200
+            python ~{JsonTools} \
+            --path out/jsonout.json \
+            --set samples="~{d}{sampleNames[i]}" \
+              subset_bam="~{d}{this_sample}.bam" \
+              subset_bai="~{d}{this_sample}.bai" \
+              idxstats_metrics="~{d}{this_sample}.stats.tsv" \
+              flagstat_pre_metrics="~{d}{this_sample}.flagstat.pre.txt"
+          } 200>"out/lockfile.lock"
       elif [ $thisexit -eq 1 ] && [ $SAMERRFAIL -eq 1 ]; then
         echo "Samtools exited with status ${thisexit} and ${SAMERR}."
         echo "Thus, sample ${this_sample} is skipped."
@@ -108,16 +113,6 @@ task ParallelMongoSubsetBam {
         echo "ERROR: samtools exited with the exit status: ${thisexit}"
         exit "${thisexit}"
       fi
-      {
-          flock 200
-          python ~{JsonTools} \
-          --path out/jsonout.json \
-          --set samples="~{d}{sampleNames[i]}" \
-            subset_bam="~{d}{this_sample}.bam" \
-            subset_bai="~{d}{this_sample}.bai" \
-            idxstats_metrics="~{d}{this_sample}.stats.tsv" \
-            flagstat_pre_metrics="~{d}{this_sample}.flagstat.pre.txt"
-      } 200>"out/lockfile.lock"
     }
 
     export -f process_sample
@@ -129,7 +124,7 @@ task ParallelMongoSubsetBam {
     docker: select_first([gatk_docker_override, "us.gcr.io/broad-gatk/gatk:"+gatk_version])
     preemptible: select_first([preemptible_tries, 5])
     cpu: select_first([n_cpu,1])
-    dx_instance_type: "mem1_ssd2_v2_x8"
+    dx_instance_type: "mem2_ssd1_v2_x16"
   }
   
   output {
