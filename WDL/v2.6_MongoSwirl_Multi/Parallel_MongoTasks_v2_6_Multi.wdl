@@ -129,7 +129,7 @@ task ParallelMongoSubsetBam {
     docker: select_first([gatk_docker_override, "us.gcr.io/broad-gatk/gatk:"+gatk_version])
     preemptible: select_first([preemptible_tries, 5])
     cpu: select_first([n_cpu,1])
-    dx_instance_type: "mem1_ssd1_v2_x8"
+    dx_instance_type: "mem1_ssd2_v2_x8"
   }
   
   output {
