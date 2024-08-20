@@ -48,7 +48,7 @@ task ParallelMongoSubsetBam {
     ref_fasta: "Reference is only required for cram input. If it is provided ref_fasta_index and ref_dict are also required."
   }
 
-  command <
+  command <<<
     set -e
     export GATK_LOCAL_JAR=~{default="/root/gatk.jar" gatk_override}
 
