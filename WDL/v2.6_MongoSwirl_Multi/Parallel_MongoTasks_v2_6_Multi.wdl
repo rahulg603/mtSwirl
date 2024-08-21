@@ -195,12 +195,14 @@ task ParallelMongoProcessBamAndRevert {
     touch out/lockfile.lock
     process_sample_and_revert() {
       local idx=$1
-      local this_bam=~{sep="' '" input_bam}
-      local this_bai=~{sep="' '" input_bai}
+      local this_bam=~{sep="' '" subset_bam}
+      local this_bai=~{sep="' '" subset_bam}
       local this_sample=~{sep="' '" sample_name}
+      local this_flagstat=~{sep="' '" flagstat_pre_metrics}
 
       this_bam=~{d}(echo $this_bam | cut -d' ' -f$((idx+1)))
       this_bai=~{d}(echo $this_bai | cut -d' ' -f$((idx+1)))
+      this_flagstat=~{d}(echo $this_flagstat | cut -d' ' -f$((idx+1)))
       this_sample_t=$(echo $this_sample | cut -d' ' -f$((idx+1)))
       this_sample="out/$this_sample_t"
 
@@ -212,7 +214,7 @@ task ParallelMongoProcessBamAndRevert {
         names(results_vec) <- titles
         df <- do.call(data.frame, as.list(results_vec))
         write.table(df, sep ='\t', row.names = F, file = "~{d}{this_sample}.flagstat.txt", quote = F)
-    CODE
+      CODE
 
       gatk CollectQualityYieldMetrics \
       -I "~{d}{this_bam}" \
