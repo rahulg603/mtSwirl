@@ -37,7 +37,8 @@ task ParallelMongoSubsetBam {
   Int disk_size = ceil(ref_size) + ceil(size(input_bam,'GB')) + 20 + addl_size
   Int machine_mem = select_first([mem, 4])
   # adjusted so we dont OOM
-  Int command_mem = (machine_mem * 1000) - 1000
+  # gives ~55.3 GB max worst case, ~9gb per thread
+  Int command_mem = (machine_mem - 2) * 1024
   # overwrite this varaible for now, mem2_ssd1_v2_x16 cpu count
   Int nthreads = select_first([n_cpu, 1])-1
   String requester_pays_prefix = (if defined(requester_pays_project) then "-u " else "") + select_first([requester_pays_project, ""])
@@ -95,7 +96,7 @@ task ParallelMongoSubsetBam {
           ~{"--gcs-project-for-requester-pays " + requester_pays_project} \
           ~{if force_manual_download then '-I bamfile.cram --read-index bamfile.cram.crai' else "-I ~{d}{this_bam} --read-index ~{d}{this_bai}"} \
           -O "~{d}{this_sample}.bam"
-          echo "~{d}{this_sample}: completed gatk. Writing to json output."
+          echo "~{d}{this_sample_t}: completed gatk. Writing to json output."
           {
             flock 200
             python ~{JsonTools} \
@@ -117,6 +118,8 @@ task ParallelMongoSubsetBam {
     }
 
     export -f process_sample
+    # let's overwrite the n cpu by asking bash
+    n_cpu=$(nproc)
     seq 0 $((~{length(input_bam)}-1)) | xargs -n 1 -P ~{select_first([n_cpu, 1])} -I {} bash -c 'process_sample "$@"' _ {}
   >>>
   runtime {
@@ -125,7 +128,8 @@ task ParallelMongoSubsetBam {
     docker: select_first([gatk_docker_override, "us.gcr.io/broad-gatk/gatk:"+gatk_version])
     preemptible: select_first([preemptible_tries, 5])
     cpu: select_first([n_cpu,1])
-    dx_instance_type: "mem2_ssd1_v2_x16"
+    #mem1_ssd1_v2_x2 works well but seems to be susceptible to spotinstance interruptions
+    dx_instance_type: "azure:mem2_ssd1_x16"
   }
   
   output {
