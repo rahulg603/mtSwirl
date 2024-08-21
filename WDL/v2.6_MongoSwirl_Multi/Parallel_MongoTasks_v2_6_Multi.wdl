@@ -38,6 +38,8 @@ task ParallelMongoSubsetBam {
   Int machine_mem = select_first([mem, 4])
   # adjusted so we dont OOM
   Int command_mem = (machine_mem * 1000) - 1000
+  # overwrite this varaible for now, mem2_ssd1_v2_x16 cpu count
+  n_cpu = 16
   Int nthreads = select_first([n_cpu,1])-1
   String requester_pays_prefix = (if defined(requester_pays_project) then "-u " else "") + select_first([requester_pays_project, ""])
   String d = "$" # a stupid trick to get ${} indexing in bash to work in Cromwell
@@ -94,12 +96,12 @@ task ParallelMongoSubsetBam {
           ~{"--gcs-project-for-requester-pays " + requester_pays_project} \
           ~{if force_manual_download then '-I bamfile.cram --read-index bamfile.cram.crai' else "-I ~{d}{this_bam} --read-index ~{d}{this_bai}"} \
           -O "~{d}{this_sample}.bam"
-          echo "~{d}{sampleNames[i]}: completed gatk. Writing to json output."
+          echo "~{d}{sampleNames[idx]}: completed gatk. Writing to json output."
           {
             flock 200
             python ~{JsonTools} \
             --path out/jsonout.json \
-            --set samples="~{d}{sampleNames[i]}" \
+            --set samples="~{d}{sampleNames[idx]}" \
               subset_bam="~{d}{this_sample}.bam" \
               subset_bai="~{d}{this_sample}.bai" \
               idxstats_metrics="~{d}{this_sample}.stats.tsv" \
