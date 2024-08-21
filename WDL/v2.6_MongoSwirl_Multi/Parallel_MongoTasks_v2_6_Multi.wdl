@@ -39,8 +39,7 @@ task ParallelMongoSubsetBam {
   # adjusted so we dont OOM
   Int command_mem = (machine_mem * 1000) - 1000
   # overwrite this varaible for now, mem2_ssd1_v2_x16 cpu count
-  # Int n_cpu = 16
-  Int nthreads = select_first([n_cpu/4, 1])-1
+  Int nthreads = select_first([n_cpu, 1])-1
   String requester_pays_prefix = (if defined(requester_pays_project) then "-u " else "") + select_first([requester_pays_project, ""])
   String d = "$" # a stupid trick to get ${} indexing in bash to work in Cromwell
   
