@@ -65,9 +65,9 @@ task ParallelMongoSubsetBam {
 
       this_bam=~{d}(echo $this_bam | cut -d' ' -f$((idx+1)))
       this_bai=~{d}(echo $this_bai | cut -d' ' -f$((idx+1)))
-      this_sample=$(echo $this_sample | cut -d' ' -f$((idx+1)))
+      this_sample_t=$(echo $this_sample | cut -d' ' -f$((idx+1)))
 
-      this_sample="out/$this_sample"
+      this_sample="out/$this_sample_t"
 
       ~{if force_manual_download then "gsutil " + requester_pays_prefix + " cp $this_bam bamfile_$idx.cram" else ""}
       ~{if force_manual_download then "gsutil " + requester_pays_prefix + " cp $this_bai bamfile_$idx.cram.crai" else ""}
@@ -95,12 +95,12 @@ task ParallelMongoSubsetBam {
           ~{"--gcs-project-for-requester-pays " + requester_pays_project} \
           ~{if force_manual_download then '-I bamfile.cram --read-index bamfile.cram.crai' else "-I ~{d}{this_bam} --read-index ~{d}{this_bai}"} \
           -O "~{d}{this_sample}.bam"
-          echo "~{d}{sampleNames[idx]}: completed gatk. Writing to json output."
+          echo "~{d}{this_sample}: completed gatk. Writing to json output."
           {
             flock 200
             python ~{JsonTools} \
             --path out/jsonout.json \
-            --set samples="~{d}{sampleNames[idx]}" \
+            --set samples="~{d}{this_sample_t}" \
               subset_bam="~{d}{this_sample}.bam" \
               subset_bai="~{d}{this_sample}.bai" \
               idxstats_metrics="~{d}{this_sample}.stats.tsv" \
@@ -117,7 +117,7 @@ task ParallelMongoSubsetBam {
     }
 
     export -f process_sample
-    seq 0 $((~{length(input_bam)}-1)) | xargs -n 1 -P ~{select_first([n_cpu,1])} -I {} bash -c 'process_sample "$@"' _ {}
+    seq 0 $((~{length(input_bam)}-1)) | xargs -n 1 -P ~{select_first([n_cpu, 1])} -I {} bash -c 'process_sample "$@"' _ {}
   >>>
   runtime {
     memory: machine_mem + " GB"
