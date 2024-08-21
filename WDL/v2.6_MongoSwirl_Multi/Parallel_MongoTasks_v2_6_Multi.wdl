@@ -310,7 +310,7 @@ task ParallelMongoProcessBamAndRevert {
     export -f process_sample_and_revert
     # let's overwrite the n cpu by asking bash
     n_cpu=$(nproc)
-    seq 0 $((~{length(input_bam)}-1)) | xargs -n 1 -P ~{select_first([n_cpu, 1])} -I {} bash -c 'process_sample_and_revert "$@"' _ {}
+    seq 0 $((~{length(subset_bam)}-1)) | xargs -n 1 -P ~{select_first([n_cpu, 1])} -I {} bash -c 'process_sample_and_revert "$@"' _ {}
 
     # call loop then read and compute mean_coverage stat to return and output for next step. if that fails, this is the place
     python <<CODE
@@ -1778,7 +1778,7 @@ task ParallelMongoAlignToMtRegShiftedAndMetrics {
 
   Int read_length_for_optimization = select_first([read_length, 151])
 
-  Int command_mem = (machine_mem - 2) * 1024
+  Int command_mem = 3 * 1024
   String d = "$" # a stupid trick to get ${} indexing in bash to work in Cromwell
 
   meta {
