@@ -107,9 +107,10 @@ workflow MitochondriaPipeline {
       force_manual_download = force_manual_download,
       mem = printreads_mem,
       JsonTools = JsonTools,
-      n_cpu = n_cpu_subsetbam,
+      # overwrite here
+      n_cpu = 16,
       preemptible_tries = preemptible_tries
-  }
+    }
 
   call MongoTasks_Multi.MongoProcessBamAndRevert as ProcessBam {
     input:
