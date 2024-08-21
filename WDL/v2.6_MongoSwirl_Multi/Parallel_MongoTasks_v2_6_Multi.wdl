@@ -129,7 +129,7 @@ task ParallelMongoSubsetBam {
     preemptible: select_first([preemptible_tries, 5])
     cpu: select_first([n_cpu, 1])
     #mem1_ssd1_v2_x2 works well but seems to be susceptible to spotinstance interruptions
-    dx_instance_type: "azure:mem2_ssd1_x16"
+    dx_instance_type: "mem2_ssd1_v2_x16"
   }
   
   output {
@@ -329,7 +329,7 @@ task ParallelMongoProcessBamAndRevert {
     docker: select_first([gatk_docker_override, "us.gcr.io/broad-gatk/gatk:"+gatk_version])
     cpu: select_first([n_cpu, 1])
     #mem1_ssd1_v2_x2 works well but seems to be susceptible to spotinstance interruptions
-    dx_instance_type: "azure:mem2_ssd1_x16"
+    dx_instance_type: "mem2_ssd1_v2_x16"
   }
   output {
     Object obj_out = read_json("out/jsonout.json")
@@ -566,8 +566,8 @@ task MongoSubsetBamToChrMAndRevert {
     docker: select_first([gatk_docker_override, "us.gcr.io/broad-gatk/gatk:"+gatk_version])
     preemptible: select_first([preemptible_tries, 5])
     cpu: select_first([n_cpu, 1])
-    #mem1_ssd1_v2_x2 works well but seems to be susceptible to spotinstance interruptions
-    dx_instance_type: "azure:mem2_ssd1_x16"
+    #mem2_ssd1_v2_x16 works well but seems to be susceptible to spotinstance interruptions
+    dx_instance_type: "mem2_ssd1_v2_x16"
   }
   output {
     Object obj_out = read_json("out/jsonout.json")
@@ -2015,7 +2015,7 @@ task ParallelMongoAlignToMtRegShiftedAndMetrics {
     cpu: this_cpu
     disks: "local-disk " + disk_size + " SSD"
     docker: "us.gcr.io/broad-gotc-prod/genomes-in-the-cloud:2.4.2-1552931386"
-    dx_instance_type: "azure:mem2_ssd1_x16"
+    dx_instance_type: "mem2_ssd1_v2_x16"
   }
   output {
     Object obj_out = read_json('out/jsonout.json')
