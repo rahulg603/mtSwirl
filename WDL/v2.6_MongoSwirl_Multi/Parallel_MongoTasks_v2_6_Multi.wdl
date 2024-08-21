@@ -39,6 +39,8 @@ task ParallelMongoSubsetBam {
   # adjusted so we dont OOM
   # gives ~55.3 GB max worst case, ~9gb per thread
   Int command_mem = (machine_mem - 2) * 1024
+  # gives ~55.3 GB max worst case, ~9gb per thread
+  Int command_mem = (machine_mem - 2) * 1024
   # overwrite this varaible for now, mem2_ssd1_v2_x16 cpu count
   Int nthreads = select_first([n_cpu, 1])-1
   String requester_pays_prefix = (if defined(requester_pays_project) then "-u " else "") + select_first([requester_pays_project, ""])
@@ -67,7 +69,9 @@ task ParallelMongoSubsetBam {
       this_bam=~{d}(echo $this_bam | cut -d' ' -f$((idx+1)))
       this_bai=~{d}(echo $this_bai | cut -d' ' -f$((idx+1)))
       this_sample_t=$(echo $this_sample | cut -d' ' -f$((idx+1)))
+      this_sample_t=$(echo $this_sample | cut -d' ' -f$((idx+1)))
 
+      this_sample="out/$this_sample_t"
       this_sample="out/$this_sample_t"
 
       ~{if force_manual_download then "gsutil " + requester_pays_prefix + " cp $this_bam bamfile_$idx.cram" else ""}
@@ -96,11 +100,12 @@ task ParallelMongoSubsetBam {
           ~{"--gcs-project-for-requester-pays " + requester_pays_project} \
           ~{if force_manual_download then '-I bamfile.cram --read-index bamfile.cram.crai' else "-I ~{d}{this_bam} --read-index ~{d}{this_bai}"} \
           -O "~{d}{this_sample}.bam"
-          echo "~{d}{this_sample_t}: completed gatk. Writing to json output."
+          echo "~{d}{this_sample}: completed gatk. Writing to json output."
           {
             flock 200
             python ~{JsonTools} \
             --path out/jsonout.json \
+            --set samples="~{d}{this_sample_t}" \
             --set samples="~{d}{this_sample_t}" \
               subset_bam="~{d}{this_sample}.bam" \
               subset_bai="~{d}{this_sample}.bai" \
@@ -121,6 +126,9 @@ task ParallelMongoSubsetBam {
     # let's overwrite the n cpu by asking bash
     n_cpu=$(nproc)
     seq 0 $((~{length(input_bam)}-1)) | xargs -n 1 -P ~{select_first([n_cpu, 1])} -I {} bash -c 'process_sample "$@"' _ {}
+    # let's overwrite the n cpu by asking bash
+    n_cpu=$(nproc)
+    seq 0 $((~{length(input_bam)}-1)) | xargs -n 1 -P ~{select_first([n_cpu, 1])} -I {} bash -c 'process_sample "$@"' _ {}
   >>>
   runtime {
     memory: machine_mem + " GB"
@@ -128,6 +136,8 @@ task ParallelMongoSubsetBam {
     docker: select_first([gatk_docker_override, "us.gcr.io/broad-gatk/gatk:"+gatk_version])
     preemptible: select_first([preemptible_tries, 5])
     cpu: select_first([n_cpu,1])
+    #mem1_ssd1_v2_x2 works well but seems to be susceptible to spotinstance interruptions
+    dx_instance_type: "azure:mem2_ssd1_x16"
     #mem1_ssd1_v2_x2 works well but seems to be susceptible to spotinstance interruptions
     dx_instance_type: "azure:mem2_ssd1_x16"
   }
