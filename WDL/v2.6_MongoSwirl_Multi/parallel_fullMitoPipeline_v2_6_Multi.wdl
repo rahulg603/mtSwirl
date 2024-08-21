@@ -201,7 +201,7 @@ workflow MitochondriaPipeline {
       ucsc_docker = ucsc_docker
   }
 
-  call AlignAndCallR2_Multi.AlignAndCallR2 as ParallelAlignAndCallR2 {
+  call AlignAndCallR2_Multi.ParallelAlignAndCallR2 as AlignAndCallR2 {
     input:
       unmapped_bam = ProcessBam.unmapped_bam,
       sample_name = ProduceSelfRefFiles.samples,
