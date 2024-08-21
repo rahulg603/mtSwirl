@@ -1986,7 +1986,7 @@ task MongoAlignToMtRegShiftedAndMetrics {
     disks: "local-disk " + disk_size + " HDD"
     docker: "us.gcr.io/broad-gotc-prod/genomes-in-the-cloud:2.4.2-1552931386"
     #mem1_ssd1_v2_x2 works well but seems to be susceptible to spotinstance interruptions
-    dx_instance_type: "azure:mem2_ssd1_x16"
+    dx_instance_type: "mem2_ssd1_v2_x16"
 
   }
   output {

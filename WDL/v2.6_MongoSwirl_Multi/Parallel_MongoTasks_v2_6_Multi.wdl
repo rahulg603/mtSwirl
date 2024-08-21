@@ -196,7 +196,7 @@ task ParallelMongoProcessBamAndRevert {
     process_sample_and_revert() {
       local idx=$1
       local this_bam=~{sep="' '" subset_bam}
-      local this_bai=~{sep="' '" subset_bam}
+      local this_bai=~{sep="' '" subset_bai}
       local this_sample=~{sep="' '" sample_name}
       local this_flagstat=~{sep="' '" flagstat_pre_metrics}
 
