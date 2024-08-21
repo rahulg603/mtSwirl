@@ -1754,9 +1754,7 @@ task MongoAlignToMtRegShiftedAndMetrics {
   #Float ref_size = size(mt_cat, "GB") + size(mt_cat_index, "GB")
   #Float shifted_ref_size = size(mt_shifted_cat, "GB") + size(mt_shifted_cat_index, "GB")
   Int disk_size = ceil(size(input_bam, "GB") * 4  + ceil(size(selfref_bundle, 'GB')) * 4) + 20
-
   Int read_length_for_optimization = select_first([read_length, 151])
-
   String d = "$" # a stupid trick to get ${} indexing in bash to work in Cromwell
 
   meta {
@@ -1771,11 +1769,9 @@ task MongoAlignToMtRegShiftedAndMetrics {
 
     set -o pipefail
     set -e
-    
     tar xf "~{selfref_bundle}"
-
     mkdir out
-
+  
     sampleNames=('~{sep="' '" sample_base_name}')
     bams=('~{sep="' '" input_bam}')
     intervals=('~{sep="' '" mt_interval_list}')
@@ -1985,10 +1981,13 @@ task MongoAlignToMtRegShiftedAndMetrics {
   >>>
   runtime {
     preemptible: select_first([preemptible_tries, 5])
-    memory: "6 GB"
+    memory: "50 GB"
     cpu: this_cpu
     disks: "local-disk " + disk_size + " HDD"
     docker: "us.gcr.io/broad-gotc-prod/genomes-in-the-cloud:2.4.2-1552931386"
+    #mem1_ssd1_v2_x2 works well but seems to be susceptible to spotinstance interruptions
+    dx_instance_type: "azure:mem2_ssd1_x16"
+
   }
   output {
     Object obj_out = read_json('out/jsonout.json')

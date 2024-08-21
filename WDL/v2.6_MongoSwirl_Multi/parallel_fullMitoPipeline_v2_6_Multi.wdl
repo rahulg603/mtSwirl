@@ -112,7 +112,7 @@ workflow MitochondriaPipeline {
       preemptible_tries = preemptible_tries
     }
 
-  call MongoTasks_Multi.MongoProcessBamAndRevert as ProcessBam {
+  call MongoTasks_Multi.ParallelMongoProcessBamAndRevert as ProcessBam {
     input:
       subset_bam = SubsetBam.subset_bam,
       subset_bai = SubsetBam.subset_bai,

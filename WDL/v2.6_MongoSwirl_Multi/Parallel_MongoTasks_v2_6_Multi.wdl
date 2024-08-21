@@ -67,9 +67,6 @@ task ParallelMongoSubsetBam {
       this_bam=~{d}(echo $this_bam | cut -d' ' -f$((idx+1)))
       this_bai=~{d}(echo $this_bai | cut -d' ' -f$((idx+1)))
       this_sample_t=$(echo $this_sample | cut -d' ' -f$((idx+1)))
-      this_sample_t=$(echo $this_sample | cut -d' ' -f$((idx+1)))
-
-      this_sample="out/$this_sample_t"
       this_sample="out/$this_sample_t"
 
       ~{if force_manual_download then "gsutil " + requester_pays_prefix + " cp $this_bam bamfile_$idx.cram" else ""}
@@ -145,7 +142,7 @@ task ParallelMongoSubsetBam {
   }
 }
 
-task MongoProcessBamAndRevert {
+task ParallelMongoProcessBamAndRevert {
   input {
     Array[File] subset_bam
     Array[File] subset_bai
@@ -177,14 +174,15 @@ task MongoProcessBamAndRevert {
   Int disk_size = ceil(ref_size) + ceil(size(subset_bam,'GB')) + ceil(size(flagstat_pre_metrics,'GB')) + 20
   Int read_length_for_optimization = select_first([read_length, 151])
   Int machine_mem = select_first([mem, 4])
-  Int command_mem = (machine_mem * 1000) - 500
+  # assumes machine_mem is 5, gives ~3gb per java vm or 55GB worst case
+  Int command_mem = (machine_mem - 2) * 1024
   String skip_hardclip_str = if skip_restore_hardclips then "--RESTORE_HARDCLIPS false" else ""
   Int nthreads = select_first([n_cpu,1])-1
 
   String d = "$" # a stupid trick to get ${} indexing in bash to work in Cromwell
   
   meta {
-    description: "Subsets a whole genome bam to just Mitochondria reads"
+    description: "Processes a whole genome bam to just Mitochondria reads"
   }
   parameter_meta {
     ref_fasta: "Reference is only required for cram input. If it is provided ref_fasta_index and ref_dict are also required."
@@ -193,18 +191,18 @@ task MongoProcessBamAndRevert {
     set -e
     export GATK_LOCAL_JAR=~{default="/root/gatk.jar" gatk_override}
 
-    sampleNames=('~{sep="' '" sample_name}')
-    flagstats=('~{sep="' '" flagstat_pre_metrics}')
-    bams=('~{sep="' '" subset_bam}')
-    bais=('~{sep="' '" subset_bai}')
     mkdir out
+    touch out/lockfile.lock
+    process_sample_and_revert() {
+      local idx=$1
+      local this_bam=~{sep="' '" input_bam}
+      local this_bai=~{sep="' '" input_bai}
+      local this_sample=~{sep="' '" sample_name}
 
-    for i in "~{d}{!sampleNames[@]}"; do
-
-      this_bam="~{d}{bams[i]}"
-      this_bai="~{d}{bais[i]}"
-      this_flagstat="~{d}{flagstats[i]}"
-      this_sample=out/"~{d}{sampleNames[i]}"
+      this_bam=~{d}(echo $this_bam | cut -d' ' -f$((idx+1)))
+      this_bai=~{d}(echo $this_bai | cut -d' ' -f$((idx+1)))
+      this_sample_t=$(echo $this_sample | cut -d' ' -f$((idx+1)))
+      this_sample="out/$this_sample_t"
 
       R --vanilla <<CODE
         vec <- readLines("~{d}{this_flagstat}")
@@ -293,20 +291,26 @@ task MongoProcessBamAndRevert {
         SORT_ORDER="coordinate" \
         CREATE_INDEX=true \
         MAX_RECORDS_IN_RAM=300000
+      {
+        flock 200
+        python ~{JsonTools} \
+        --path out/jsonout.json \
+        --set-int reads_dropped="$(cat ~{d}{this_sample}.ct_failed.txt)" \
+          mean_coverage="$(cat ~{d}{this_sample}.mean_coverage.txt)" \
+        --set samples="~{d}{this_sample_t}" \
+          output_bam="~{d}{this_sample}.proc.bam" \
+          output_bai="~{d}{this_sample}.proc.bai" \
+          unmapped_bam="~{d}{this_sample}.unmap.bam" \
+          duplicate_metrics="~{d}{this_sample}.duplicate.metrics" \
+          yield_metrics="~{d}{this_sample}.yield_metrics.txt"
+      } 200>"out/lockfile.lock"
+    }
+    export -f process_sample_and_revert
+    # let's overwrite the n cpu by asking bash
+    n_cpu=$(nproc)
+    seq 0 $((~{length(input_bam)}-1)) | xargs -n 1 -P ~{select_first([n_cpu, 1])} -I {} bash -c 'process_sample_and_revert "$@"' _ {}
 
-      python ~{JsonTools} \
-      --path out/jsonout.json \
-      --set-int reads_dropped="$(cat ~{d}{this_sample}.ct_failed.txt)" \
-        mean_coverage="$(cat ~{d}{this_sample}.mean_coverage.txt)" \
-      --set samples="~{d}{sampleNames[i]}" \
-        output_bam="~{d}{this_sample}.proc.bam" \
-        output_bai="~{d}{this_sample}.proc.bai" \
-        unmapped_bam="~{d}{this_sample}.unmap.bam" \
-        duplicate_metrics="~{d}{this_sample}.duplicate.metrics" \
-        yield_metrics="~{d}{this_sample}.yield_metrics.txt"
-    
-    done
-
+    # call loop then read and compute mean_coverage stat to return and output for next step. if that fails, this is the place
     python <<CODE
     import json
     from math import ceil
@@ -319,10 +323,11 @@ task MongoProcessBamAndRevert {
   >>>
   runtime {
     memory: machine_mem + " GB"
-    disks: "local-disk " + disk_size + " HDD"
+    disks: "local-disk " + disk_size + " SSD"
     docker: select_first([gatk_docker_override, "us.gcr.io/broad-gatk/gatk:"+gatk_version])
-    preemptible: select_first([preemptible_tries, 5])
-    cpu: select_first([n_cpu,1])
+    cpu: select_first([n_cpu, 1])
+    #mem1_ssd1_v2_x2 works well but seems to be susceptible to spotinstance interruptions
+    dx_instance_type: "azure:mem2_ssd1_x16"
   }
   output {
     Object obj_out = read_json("out/jsonout.json")
@@ -441,7 +446,7 @@ task MongoSubsetBamToChrMAndRevert {
           ~{if force_manual_download then '-I bamfile.cram --read-index bamfile.cram.crai' else "-I ~{d}{this_bam} --read-index ~{d}{this_bai}"} \
           -O "~{d}{this_sample}.bam"
         
-        gatk CollectQualityYieldMetrics \
+        gatk --java-options "-Xmx~{command_mem}m" CollectQualityYieldMetrics \
         -I "~{d}{this_sample}.bam" \
         ~{"-R " + ref_fasta} \
         -O "~{d}{this_sample}.yield_metrics.tmp.txt"
@@ -555,10 +560,12 @@ task MongoSubsetBamToChrMAndRevert {
   >>>
   runtime {
     memory: machine_mem + " GB"
-    disks: "local-disk " + disk_size + " HDD"
+    disks: "local-disk " + disk_size + " SSD"
     docker: select_first([gatk_docker_override, "us.gcr.io/broad-gatk/gatk:"+gatk_version])
     preemptible: select_first([preemptible_tries, 5])
-    cpu: select_first([n_cpu,1])
+    cpu: select_first([n_cpu, 1])
+    #mem1_ssd1_v2_x2 works well but seems to be susceptible to spotinstance interruptions
+    dx_instance_type: "azure:mem2_ssd1_x16"
   }
   output {
     Object obj_out = read_json("out/jsonout.json")
@@ -1724,7 +1731,7 @@ task MongoM2FilterContaminationSplit {
   }
 }
 
-task MongoAlignToMtRegShiftedAndMetrics {
+task ParallelMongoAlignToMtRegShiftedAndMetrics {
   input {
     Array[File] input_bam
     String bwa_commandline = "bwa mem -K 100000000 -p -v 3 -Y $bash_ref_fasta"
@@ -1769,6 +1776,7 @@ task MongoAlignToMtRegShiftedAndMetrics {
 
   Int read_length_for_optimization = select_first([read_length, 151])
 
+  Int command_mem = (machine_mem - 2) * 1024
   String d = "$" # a stupid trick to get ${} indexing in bash to work in Cromwell
 
   meta {
@@ -1778,47 +1786,46 @@ task MongoAlignToMtRegShiftedAndMetrics {
     input_bam: "Unmapped bam"
   }
   command <<<
-
     export BWAVERSION=$(/usr/gitc/bwa 2>&1 | grep -e '^Version' | sed 's/Version: //')
-
     set -o pipefail
     set -e
-    
     tar xf "~{selfref_bundle}"
-
     mkdir out
+    touch out/lockfile.lock
 
-    sampleNames=('~{sep="' '" sample_base_name}')
-    bams=('~{sep="' '" input_bam}')
-    intervals=('~{sep="' '" mt_interval_list}')
-    cat_fastas=('~{sep="' '" mt_cat}')
-    fastas=('~{sep="' '" mt}')
-    shifted_cat_fastas=('~{sep="' '" mt_shifted_cat}')
-    shifted_fastas=('~{sep="' '" mt_shifted}')
+    align_to_mt_reg_shifted_metrics() {
+      local idx=$1
 
-    for i in "~{d}{!sampleNames[@]}"; do
+      local this_sample_t=~{sep="' '" sample_base_name}
+      local this_bam=~{sep="' '" input_bam}
+      local this_mt_interval=~{sep="' '" mt_interval_list}
+      local this_mt_cat_fasta=~{sep="' '" mt_cat}
+      local this_mt_fasta=~{sep="' '" mt}
+      local this_mt_shifted_cat_fasta=~{sep="' '" mt_shifted_cat}
+      local this_mt_shifted_fasta=~{sep="' '" mt_shifted}
 
-      this_bam="~{d}{bams[i]}"
-      this_sample=out/"~{d}{sampleNames[i]}~{suffix}"
-      this_mt_intervals="~{d}{intervals[i]}"
-      this_mt_cat_fasta="~{d}{cat_fastas[i]}"
-      this_mt_fasta="~{d}{fastas[i]}"
-      this_mt_shifted_cat_fasta="~{d}{shifted_cat_fastas[i]}"
-      this_mt_shifted_fasta="~{d}{shifted_fastas[i]}"
+      this_sample_t=~{d}(echo $this_sample_t | cut -d' ' -f$((idx+1)))
+      this_bam=~{d}(echo $this_bam | cut -d' ' -f$((idx+1)))
+      this_mt_interval=~{d}(echo $this_mt_interval | cut -d' ' -f$((idx+1)))
+      this_mt_cat_fasta=~{d}(echo $this_mt_cat_fasta | cut -d' ' -f$((idx+1)))
+      this_mt_fasta=~{d}(echo $this_mt_fasta | cut -d' ' -f$((idx+1)))
+      this_mt_shifted_cat_fasta=~{d}(echo $this_mt_shifted_cat_fasta | cut -d' ' -f$((idx+1)))
+      this_mt_shifted_fasta=~{d}(echo $this_mt_shifted_fasta | cut -d' ' -f$((idx+1)))
 
+      this_sample="out/$this_sample_t"
       this_output_bam_basename=out/"$(basename ~{d}{this_bam} .bam).remap~{suffix}"
       
       # set the bash variable needed for the command-line
       /usr/gitc/bwa index "~{d}{this_mt_cat_fasta}"
       bash_ref_fasta="~{d}{this_mt_cat_fasta}"
-      java -Xms5000m -jar /usr/gitc/picard.jar \
+      java -Xms3000m "-Xmx~{command_mem}m" -jar /usr/gitc/picard.jar \
         SamToFastq \
         INPUT="~{d}{this_bam}" \
         FASTQ=/dev/stdout \
         INTERLEAVE=true \
         NON_PF=true | \
       /usr/gitc/~{this_bwa_commandline} /dev/stdin - 2> >(tee "~{d}{this_output_bam_basename}.bwa.stderr.log" >&2) | \
-      java -Xms5000m -jar /usr/gitc/picard.jar \
+      java -Xms3000m "-Xmx~{command_mem}m" -jar /usr/gitc/picard.jar \
         MergeBamAlignment \
         VALIDATION_STRINGENCY=SILENT \
         EXPECTED_ORIENTATIONS=FR \
@@ -1847,7 +1854,7 @@ task MongoAlignToMtRegShiftedAndMetrics {
         UNMAP_CONTAMINANT_READS=true \
         ADD_PG_TAG_TO_READS=false
 
-      java -Xms5000m -jar /usr/gitc/picard.jar \
+      java -Xms3000m "-Xmx~{command_mem}m" -jar /usr/gitc/picard.jar \
         MarkDuplicates \
         INPUT=mba.bam \
         OUTPUT=md.bam \
@@ -1859,7 +1866,7 @@ task MongoAlignToMtRegShiftedAndMetrics {
         CLEAR_DT="false" \
         ADD_PG_TAG_TO_READS=false
 
-      java -Xms5000m -jar /usr/gitc/picard.jar \
+      java -Xms3000m "-Xmx~{command_mem}m" -jar /usr/gitc/picard.jar \
         SortSam \
         INPUT=md.bam \
         OUTPUT="~{d}{this_output_bam_basename}_pre_mt_filt.bam" \
@@ -1868,7 +1875,7 @@ task MongoAlignToMtRegShiftedAndMetrics {
         MAX_RECORDS_IN_RAM=300000
 
       # now we have to subset to mito and update sequence dictionary
-      java -Xms5000m -jar /usr/gitc/picard.jar \
+      java -Xms3000m "-Xmx~{command_mem}m" -jar /usr/gitc/picard.jar \
         ReorderSam \
         I="~{d}{this_output_bam_basename}_pre_mt_filt.bam" \
         O="~{d}{this_output_bam_basename}.bam" \
@@ -1880,14 +1887,14 @@ task MongoAlignToMtRegShiftedAndMetrics {
       # set the bash variable needed for the command-line
       /usr/gitc/bwa index "~{d}{this_mt_shifted_cat_fasta}"
       bash_ref_fasta="~{d}{this_mt_shifted_cat_fasta}"
-      java -Xms5000m -jar /usr/gitc/picard.jar \
+      java -Xms3000m "-Xmx~{command_mem}m" -jar /usr/gitc/picard.jar \
         SamToFastq \
         INPUT="~{d}{this_bam}" \
         FASTQ=/dev/stdout \
         INTERLEAVE=true \
         NON_PF=true | \
       /usr/gitc/~{this_bwa_commandline} /dev/stdin - 2> >(tee "~{d}{this_output_bam_basename}.shifted.bwa.stderr.log" >&2) | \
-      java -Xms5000m -jar /usr/gitc/picard.jar \
+      java -Xms3000m "-Xmx~{command_mem}m" -jar /usr/gitc/picard.jar \
         MergeBamAlignment \
         VALIDATION_STRINGENCY=SILENT \
         EXPECTED_ORIENTATIONS=FR \
@@ -1916,7 +1923,7 @@ task MongoAlignToMtRegShiftedAndMetrics {
         UNMAP_CONTAMINANT_READS=true \
         ADD_PG_TAG_TO_READS=false
 
-      java -Xms5000m -jar /usr/gitc/picard.jar \
+      java -Xms3000m "-Xmx~{command_mem}m" -jar /usr/gitc/picard.jar \
         MarkDuplicates \
         INPUT=mba.shifted.bam \
         OUTPUT=md.shifted.bam \
@@ -1928,7 +1935,7 @@ task MongoAlignToMtRegShiftedAndMetrics {
         CLEAR_DT="false" \
         ADD_PG_TAG_TO_READS=false
 
-      java -Xms5000m -jar /usr/gitc/picard.jar \
+      java -Xms3000m "-Xmx~{command_mem}m" -jar /usr/gitc/picard.jar \
         SortSam \
         INPUT=md.shifted.bam \
         OUTPUT="~{d}{this_output_bam_basename}.shifted_pre_mt_filt.bam" \
@@ -1937,7 +1944,7 @@ task MongoAlignToMtRegShiftedAndMetrics {
         MAX_RECORDS_IN_RAM=300000
 
       # now we have to subset to mito and update sequence dictionary
-      java -Xms5000m -jar /usr/gitc/picard.jar \
+      java -Xms3000m "-Xmx~{command_mem}m" -jar /usr/gitc/picard.jar \
         ReorderSam \
         I="~{d}{this_output_bam_basename}.shifted_pre_mt_filt.bam" \
         O="~{d}{this_output_bam_basename}.shifted.bam" \
@@ -1946,7 +1953,7 @@ task MongoAlignToMtRegShiftedAndMetrics {
         CREATE_INDEX=true
 
       echo "Now collecting wgs metrics..."
-      java -Xms5000m -jar /usr/gitc/picard.jar \
+      java -Xms3000m "-Xmx~{command_mem}m" -jar /usr/gitc/picard.jar \
         CollectWgsMetrics \
         INPUT="~{d}{this_output_bam_basename}.bam" \
         INTERVALS="~{d}{this_mt_intervals}" \
@@ -1963,26 +1970,32 @@ task MongoAlignToMtRegShiftedAndMetrics {
         df = read.table("~{d}{this_sample}_r2_wgs_metrics.txt",skip=6,header=TRUE,stringsAsFactors=FALSE,sep='\t',nrows=1)
         write.table(floor(df[,"MEAN_COVERAGE"]), "~{d}{this_sample}_r2_mean_coverage.txt", quote=F, col.names=F, row.names=F)
         write.table(df[,"MEDIAN_COVERAGE"], "~{d}{this_sample}_r2_median_coverage.txt", quote=F, col.names=F, row.names=F)
-    CODE
+      CODE
+      {
+        flock 200
+        python ~{JsonTools} \
+        --path out/jsonout.json \
+        --set-int mean_coverage="$(cat ~{d}{this_sample}_r2_mean_coverage.txt)" \
+        --set-float median_coverage="$(cat ~{d}{this_sample}_r2_median_coverage.txt)" \
+        --set samples="~{d}{this_sample_t}" \
+          mt_aligned_bam="~{d}{this_output_bam_basename}.bam" \
+          mt_aligned_bai="~{d}{this_output_bam_basename}.bai" \
+          nuc_and_mt_aligned_bam="~{d}{this_output_bam_basename}_pre_mt_filt.bam" \
+          nuc_and_mt_aligned_bai="~{d}{this_output_bam_basename}_pre_mt_filt.bai" \        
+          duplicate_metrics="~{d}{this_output_bam_basename}.metrics" \
+          shifted_mt_aligned_bam="~{d}{this_output_bam_basename}.shifted.bam" \
+          shifted_mt_aligned_bai="~{d}{this_output_bam_basename}.shifted.bai" \        
+          nuc_and_shifted_mt_aligned_bam="~{d}{this_output_bam_basename}.shifted_pre_mt_filt.bam" \
+          nuc_and_shifted_mt_aligned_bai="~{d}{this_output_bam_basename}.shifted_pre_mt_filt.bai" \
+          wgs_metrics="~{d}{this_sample}_r2_wgs_metrics.txt" \        
+          theoretical_sensitivity="~{d}{this_sample}_r2_wgs_theoretical_sensitivity.txt"
+        } 200>"out/lockfile.lock"
+    }
 
-      python ~{JsonTools} \
-      --path out/jsonout.json \
-      --set-int mean_coverage="$(cat ~{d}{this_sample}_r2_mean_coverage.txt)" \
-      --set-float median_coverage="$(cat ~{d}{this_sample}_r2_median_coverage.txt)" \
-      --set samples="~{d}{sampleNames[i]}" \
-        mt_aligned_bam="~{d}{this_output_bam_basename}.bam" \
-        mt_aligned_bai="~{d}{this_output_bam_basename}.bai" \
-        nuc_and_mt_aligned_bam="~{d}{this_output_bam_basename}_pre_mt_filt.bam" \
-        nuc_and_mt_aligned_bai="~{d}{this_output_bam_basename}_pre_mt_filt.bai" \        
-        duplicate_metrics="~{d}{this_output_bam_basename}.metrics" \
-        shifted_mt_aligned_bam="~{d}{this_output_bam_basename}.shifted.bam" \
-        shifted_mt_aligned_bai="~{d}{this_output_bam_basename}.shifted.bai" \        
-        nuc_and_shifted_mt_aligned_bam="~{d}{this_output_bam_basename}.shifted_pre_mt_filt.bam" \
-        nuc_and_shifted_mt_aligned_bai="~{d}{this_output_bam_basename}.shifted_pre_mt_filt.bai" \
-        wgs_metrics="~{d}{this_sample}_r2_wgs_metrics.txt" \        
-        theoretical_sensitivity="~{d}{this_sample}_r2_wgs_theoretical_sensitivity.txt"
-    
-    done
+    export -f align_to_mt_reg_shifted_metrics
+    # let's overwrite the n cpu by asking bash
+    n_cpu=$(nproc)
+    seq 0 $((~{length(input_bam)}-1)) | xargs -n 1 -P ~{select_first([n_cpu, 1])} -I {} bash -c 'align_to_mt_reg_shifted_metrics "$@"' _ {}
 
     python <<CODE
     import json
@@ -1993,14 +2006,14 @@ task MongoAlignToMtRegShiftedAndMetrics {
     with open('this_max_r2.txt', 'w') as f:
       f.write(str(this_max))
     CODE
-    
   >>>
   runtime {
     preemptible: select_first([preemptible_tries, 5])
-    memory: "6 GB"
+    memory: "55 GB"
     cpu: this_cpu
-    disks: "local-disk " + disk_size + " HDD"
+    disks: "local-disk " + disk_size + " SSD"
     docker: "us.gcr.io/broad-gotc-prod/genomes-in-the-cloud:2.4.2-1552931386"
+    dx_instance_type: "azure:mem2_ssd1_x16"
   }
   output {
     Object obj_out = read_json('out/jsonout.json')
