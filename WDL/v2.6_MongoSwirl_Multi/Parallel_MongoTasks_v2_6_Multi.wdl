@@ -206,15 +206,7 @@ task ParallelMongoProcessBamAndRevert {
       this_sample_t=$(echo $this_sample | cut -d' ' -f$((idx+1)))
       this_sample="out/$this_sample_t"
 
-      R --vanilla <<CODE
-        vec <- readLines("~{d}{this_flagstat}")
-        titles <- c('total', 'secondary', 'supplementary', 'duplicates', 'mapped', 'paired', 'read1', 'read2', 'properly_paired', 'with_itself_and_mate_mapped', 'singletons', 'mate_diff_chr', 'mate_diff_chr_mapq_5')
-        get_ele <- function(x) gregexpr('^[0-9]+',x)[[1]]
-        results_vec <- as.numeric(sapply(vec, function(x) substr(x, get_ele(x)[1], get_ele(x)[1] + attr(get_ele(x), 'match.length') - 1)))
-        names(results_vec) <- titles
-        df <- do.call(data.frame, as.list(results_vec))
-        write.table(df, sep ='\t', row.names = F, file = "~{d}{this_sample}.flagstat.txt", quote = F)
-      CODE
+      R --vanilla -e 'vec <- readLines("~{d}{this_flagstat}");titles <- c("total", "secondary", "supplementary", "duplicates", "mapped", "paired", "read1", "read2", "properly_paired", "with_itself_and_mate_mapped", "singletons", "mate_diff_chr", "mate_diff_chr_mapq_5");get_ele <- function(x) gregexpr("^[0-9]+",x)[[1]];results_vec <- as.numeric(sapply(vec, function(x) substr(x, get_ele(x)[1], get_ele(x)[1] + attr(get_ele(x), "match.length") - 1)));names(results_vec) <- titles;df <- do.call(data.frame, as.list(results_vec));write.table(df, sep ="\t", row.names = F, file = "~{d}{this_sample}.flagstat.txt", quote = F)'
       ls out
       gatk CollectQualityYieldMetrics \
       -I "~{d}{this_bam}" \
