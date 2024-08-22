@@ -101,7 +101,6 @@ task ParallelMongoSubsetBam {
             python ~{JsonTools} \
             --path out/jsonout.json \
             --set samples="~{d}{this_sample_t}" \
-            --set samples="~{d}{this_sample_t}" \
               subset_bam="~{d}{this_sample}.bam" \
               subset_bai="~{d}{this_sample}.bai" \
               idxstats_metrics="~{d}{this_sample}.stats.tsv" \

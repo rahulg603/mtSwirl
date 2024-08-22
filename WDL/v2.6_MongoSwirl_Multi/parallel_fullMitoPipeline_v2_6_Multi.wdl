@@ -587,11 +587,11 @@ task TransposeTable {
   command <<<
     set -e
 
-    R --vanilla <<CODE
+    R --vanilla <<EOF
       df = read.csv("~{input_table}", header=F, sep='\t')
       swapped_df = as.data.frame(t(df))
       write.table(swapped_df, sep ='\t', row.names = F, col.names = F, file = "~{output_table}", quote = F)
-    CODE
+    EOF
   >>>
 
   output {
@@ -630,25 +630,25 @@ task MergeMitoMultiSampleOutputs {
     set -e
 
     # start by merging statistics
-    R --vanilla <<CODE
+    R --vanilla <<EOF
       files_of_interest <- read.csv("~{write_lines(statistics)}", sep='\t', stringsAsFactors=F, header=F)[[1]]
       dfs <- lapply(files_of_interest, function(x)read.csv(x, sep='\t', stringsAsFactors=F))
       df <- do.call("rbind", dfs)
       write.table(df, sep ='\t', row.names = F, file = "batch_analysis_statistics.tsv", quote = F)
-    CODE
+    EOF
 
     # now produce the relevant inputs for the per-batch MT script
-    R --vanilla <<CODE
+    R --vanilla <<EOF
       sample_ids <- read.csv("~{write_lines(sample_name)}", sep='\t', stringsAsFactors=F, header=F)[[1]]
       paths_coverage <- read.csv("~{write_lines(coverage_table)}", sep='\t', stringsAsFactors=F, header=F)[[1]]
       paths_vcf <- read.csv("~{write_lines(variant_vcf)}", sep='\t', stringsAsFactors=F, header=F)[[1]]
 
       write.table(data.frame(s=sample_ids, path=paths_coverage), sep='\t', row.names=F, file='coverage_paths.tsv', quote=F)
       write.table(data.frame(s=sample_ids, path=paths_vcf), sep='\t', row.names=F, file='vcf_paths.tsv', quote=F)
-    CODE
+    EOF
 
     # merge idxstats stuff
-    R --vanilla <<CODE
+    R --vanilla <<EOF
       files_of_interest <- read.csv("~{write_lines(idxstats_metrics)}", sep='\t', stringsAsFactors=F, header=F)[[1]]
       samples <- read.csv("~{write_lines(sample_name)}", stringsAsFactors=F, header=F)[[1]]
       dfs <- lapply(1:length(files_of_interest), function(idx) {
@@ -660,10 +660,10 @@ task MergeMitoMultiSampleOutputs {
       gz1 <- gzfile("batch_idxstats_metrics.tsv.gz", 'w')
       write.table(df, sep ='\t', row.names = F, file = gz1, quote = F)
       close(gz1)
-    CODE
+    EOF
 
     # merge yield stuff
-    R --vanilla <<CODE
+    R --vanilla <<EOF
       files_of_interest <- read.csv("~{write_lines(yield_metrics)}", sep='\t', stringsAsFactors=F, header=F)[[1]]
       samples <- read.csv("~{write_lines(sample_name)}", stringsAsFactors=F, header=F)[[1]]
       dfs <- lapply(1:length(files_of_interest), function(idx) {
@@ -675,7 +675,7 @@ task MergeMitoMultiSampleOutputs {
       gz1 <- gzfile("batch_yield_metrics.tsv.gz", 'w')
       write.table(df, sep ='\t', row.names = F, file = gz1, quote = F)
       close(gz1)
-    CODE
+    EOF
 
     mkdir tmp
 
