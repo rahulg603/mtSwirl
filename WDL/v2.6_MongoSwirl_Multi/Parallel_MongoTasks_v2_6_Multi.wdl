@@ -116,19 +116,17 @@ task ParallelMongoSubsetBam {
         exit "${thisexit}"
       fi
     }
-
     export -f process_sample
     # let's overwrite the n cpu by asking bash
     n_cpu=$(nproc)
     seq 0 $((~{length(input_bam)}-1)) | xargs -n 1 -P ~{select_first([n_cpu, 1])} -I {} bash -c 'process_sample "$@"' _ {}
   >>>
   runtime {
-    memory: machine_mem + " GB"
-    disks: "local-disk " + disk_size + " SSD"
+    # memory: machine_mem + " GB"
+    # disks: "local-disk " + disk_size + " SSD"
     docker: select_first([gatk_docker_override, "us.gcr.io/broad-gatk/gatk:"+gatk_version])
-    preemptible: select_first([preemptible_tries, 5])
-    cpu: select_first([n_cpu, 1])
-    #mem1_ssd1_v2_x2 works well but seems to be susceptible to spotinstance interruptions
+    # preemptible: select_first([preemptible_tries, 5])
+    # cpu: select_first([n_cpu, 1])
     dx_instance_type: "mem3_ssd1_x16"
   }
   
@@ -325,10 +323,10 @@ task ParallelMongoProcessBamAndRevert {
     EOF
   >>>
   runtime {
-    memory: machine_mem * 10 + " GB"
-    disks: "local-disk " + disk_size + " SSD"
+    # memory: machine_mem * 10 + " GB"
+    # disks: "local-disk " + disk_size + " SSD"
     docker: select_first([gatk_docker_override, "us.gcr.io/broad-gatk/gatk:"+gatk_version])
-    cpu: select_first([n_cpu, 1])
+    # cpu: select_first([n_cpu, 1])
     #mem1_ssd1_v2_x2 works well but seems to be susceptible to spotinstance interruptions
     dx_instance_type: "mem3_ssd1_x16"
   }
@@ -562,11 +560,11 @@ task MongoSubsetBamToChrMAndRevert {
     EOF
   >>>
   runtime {
-    memory: machine_mem + " GB"
-    disks: "local-disk " + disk_size + " SSD"
+    # memory: machine_mem + " GB"
+    # disks: "local-disk " + disk_size + " SSD"
     docker: select_first([gatk_docker_override, "us.gcr.io/broad-gatk/gatk:"+gatk_version])
-    preemptible: select_first([preemptible_tries, 5])
-    cpu: select_first([n_cpu, 1])
+    # preemptible: select_first([preemptible_tries, 5])
+    # cpu: select_first([n_cpu, 1])
     #mem2_ssd1_v2_x16 works well but seems to be susceptible to spotinstance interruptions
     dx_instance_type: "mem3_ssd1_x16"
   }
@@ -2010,10 +2008,10 @@ task ParallelMongoAlignToMtRegShiftedAndMetrics {
     EOF
   >>>
   runtime {
-    preemptible: select_first([preemptible_tries, 5])
-    memory: "55 GB"
-    cpu: this_cpu
-    disks: "local-disk " + disk_size + " SSD"
+    # preemptible: select_first([preemptible_tries, 5])
+    # memory: "55 GB"
+    # cpu: this_cpu
+    # disks: "local-disk " + disk_size + " SSD"
     docker: "us.gcr.io/broad-gotc-prod/genomes-in-the-cloud:2.4.2-1552931386"
     dx_instance_type: "mem3_ssd1_x16"
   }
