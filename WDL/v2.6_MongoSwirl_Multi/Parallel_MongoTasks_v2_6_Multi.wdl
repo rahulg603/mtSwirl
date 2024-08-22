@@ -215,7 +215,7 @@ task ParallelMongoProcessBamAndRevert {
         df <- do.call(data.frame, as.list(results_vec))
         write.table(df, sep ='\t', row.names = F, file = "~{d}{this_sample}.flagstat.txt", quote = F)
       CODE
-
+      ls out
       gatk CollectQualityYieldMetrics \
       -I "~{d}{this_bam}" \
       ~{"-R " + ref_fasta} \
@@ -269,11 +269,7 @@ task ParallelMongoProcessBamAndRevert {
         INCLUDE_BQ_HISTOGRAM=true \
         THEORETICAL_SENSITIVITY_OUTPUT="~{d}{this_sample}.theoretical_sensitivity.txt"
 
-      R --vanilla <<CODE
-        df = read.table("~{d}{this_sample}.wgs_metrics.txt",skip=6,header=TRUE,stringsAsFactors=FALSE,sep='\t',nrows=1)
-        write.table(floor(df[,"MEAN_COVERAGE"]), "~{d}{this_sample}.mean_coverage.txt", quote=F, col.names=F, row.names=F)
-        write.table(df[,"MEDIAN_COVERAGE"], "~{d}{this_sample}.median_coverage.txt", quote=F, col.names=F, row.names=F)
-    CODE
+      R --vanilla -e 'df = read.table("~{d}{this_sample}.wgs_metrics.txt",skip=6,header=TRUE,stringsAsFactors=FALSE,sep='\t',nrows=1);write.table(floor(df[,"MEAN_COVERAGE"]), "~{d}{this_sample}.mean_coverage.txt", quote=F, col.names=F, row.names=F);write.table(df[,"MEDIAN_COVERAGE"], "~{d}{this_sample}.median_coverage.txt", quote=F, col.names=F, row.names=F)'
 
       echo "Now preprocessing subsetted bam..."
       gatk --java-options "-Xmx~{command_mem}m" MarkDuplicates \
@@ -313,7 +309,7 @@ task ParallelMongoProcessBamAndRevert {
     seq 0 $((~{length(subset_bam)}-1)) | xargs -n 1 -P ~{select_first([n_cpu, 1])} -I {} bash -c 'process_sample_and_revert "$@"' _ {}
 
     # call loop then read and compute mean_coverage stat to return and output for next step. if that fails, this is the place
-    python <<CODE
+    python <<HEREDOC
     import json
     from math import ceil
     with open("out/jsonout.json", 'r') as json_file:    
@@ -321,7 +317,7 @@ task ParallelMongoProcessBamAndRevert {
     this_max = ceil(max(file_of_interest['mean_coverage']))
     with open('this_max.txt', 'w') as f:
       f.write(str(this_max))
-    CODE
+    HEREDOC
   >>>
   runtime {
     memory: machine_mem + " GB"
