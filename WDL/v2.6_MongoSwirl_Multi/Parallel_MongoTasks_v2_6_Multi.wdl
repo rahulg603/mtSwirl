@@ -95,7 +95,8 @@ task ParallelMongoSubsetBam {
           ~{"--gcs-project-for-requester-pays " + requester_pays_project} \
           ~{if force_manual_download then '-I bamfile.cram --read-index bamfile.cram.crai' else "-I ~{d}{this_bam} --read-index ~{d}{this_bai}"} \
           -O "~{d}{this_sample}.bam"
-          echo "~{d}{this_sample_t}: completed gatk. Writing to json output."
+          
+        echo "~{d}{this_sample_t}: completed gatk. Writing to json output."
           {
             flock 200
             python ~{JsonTools} \
