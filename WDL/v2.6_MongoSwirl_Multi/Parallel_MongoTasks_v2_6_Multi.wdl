@@ -38,7 +38,7 @@ task ParallelMongoSubsetBam {
   Int machine_mem = select_first([mem, 4])
   # adjusted so we dont OOM
   # gives ~55.3 GB max worst case, ~9gb per thread
-  Int command_mem = (machine_mem - 2) * 1024
+  Int command_mem = (machine_mem - 2) * 2048
   # overwrite this varaible for now, mem2_ssd1_v2_x16 cpu count
   Int nthreads = select_first([n_cpu, 1])-1
   String requester_pays_prefix = (if defined(requester_pays_project) then "-u " else "") + select_first([requester_pays_project, ""])
@@ -129,7 +129,7 @@ task ParallelMongoSubsetBam {
     preemptible: select_first([preemptible_tries, 5])
     cpu: select_first([n_cpu, 1])
     #mem1_ssd1_v2_x2 works well but seems to be susceptible to spotinstance interruptions
-    dx_instance_type: "azure:mem2_ssd1_x16"
+    dx_instance_type: "mem3_ssd1_x16"
   }
   
   output {
@@ -175,7 +175,7 @@ task ParallelMongoProcessBamAndRevert {
   Int read_length_for_optimization = select_first([read_length, 151])
   Int machine_mem = select_first([mem, 4])
   # assumes machine_mem is 5, gives ~3gb per java vm or 55GB worst case
-  Int command_mem = (machine_mem - 2) * 1024
+  Int command_mem = (machine_mem - 2) * 2048
   String skip_hardclip_str = if skip_restore_hardclips then "--RESTORE_HARDCLIPS false" else ""
   Int nthreads = select_first([n_cpu,1])-1
 
@@ -315,14 +315,14 @@ task ParallelMongoProcessBamAndRevert {
 
     # call loop then read and compute mean_coverage stat to return and output for next step. if that fails, this is the place
     python <<HEREDOC
-    import json
-    from math import ceil
-    with open("out/jsonout.json", 'r') as json_file:    
-      file_of_interest = json.load(json_file)
-    this_max = ceil(max(file_of_interest['mean_coverage']))
-    with open('this_max.txt', 'w') as f:
-      f.write(str(this_max))
-    HEREDOC
+      import json
+      from math import ceil
+      with open("out/jsonout.json", 'r') as json_file:    
+        file_of_interest = json.load(json_file)
+      this_max = ceil(max(file_of_interest['mean_coverage']))
+      with open('this_max.txt', 'w') as f:
+        f.write(str(this_max))
+      HEREDOC
   >>>
   runtime {
     memory: machine_mem * 10 + " GB"
@@ -330,7 +330,7 @@ task ParallelMongoProcessBamAndRevert {
     docker: select_first([gatk_docker_override, "us.gcr.io/broad-gatk/gatk:"+gatk_version])
     cpu: select_first([n_cpu, 1])
     #mem1_ssd1_v2_x2 works well but seems to be susceptible to spotinstance interruptions
-    dx_instance_type: "azure:mem2_ssd1_x16"
+    dx_instance_type: "mem3_ssd1_x16"
   }
   output {
     Object obj_out = read_json("out/jsonout.json")
@@ -568,7 +568,7 @@ task MongoSubsetBamToChrMAndRevert {
     preemptible: select_first([preemptible_tries, 5])
     cpu: select_first([n_cpu, 1])
     #mem2_ssd1_v2_x16 works well but seems to be susceptible to spotinstance interruptions
-    dx_instance_type: "azure:mem2_ssd1_x16"
+    dx_instance_type: "mem3_ssd1_x16"
   }
   output {
     Object obj_out = read_json("out/jsonout.json")
@@ -1778,7 +1778,7 @@ task ParallelMongoAlignToMtRegShiftedAndMetrics {
 
   Int read_length_for_optimization = select_first([read_length, 151])
 
-  Int command_mem = 3 * 1024
+  Int command_mem = 3 * 2048
   String d = "$" # a stupid trick to get ${} indexing in bash to work in Cromwell
 
   meta {
@@ -1820,14 +1820,14 @@ task ParallelMongoAlignToMtRegShiftedAndMetrics {
       # set the bash variable needed for the command-line
       /usr/gitc/bwa index "~{d}{this_mt_cat_fasta}"
       bash_ref_fasta="~{d}{this_mt_cat_fasta}"
-      java -Xms3000m "-Xmx~{command_mem}m" -jar /usr/gitc/picard.jar \
+      java -Xms3072m "-Xmx~{command_mem}m" -jar /usr/gitc/picard.jar \
         SamToFastq \
         INPUT="~{d}{this_bam}" \
         FASTQ=/dev/stdout \
         INTERLEAVE=true \
         NON_PF=true | \
       /usr/gitc/~{this_bwa_commandline} /dev/stdin - 2> >(tee "~{d}{this_output_bam_basename}.bwa.stderr.log" >&2) | \
-      java -Xms3000m "-Xmx~{command_mem}m" -jar /usr/gitc/picard.jar \
+      java -Xms3072m "-Xmx~{command_mem}m" -jar /usr/gitc/picard.jar \
         MergeBamAlignment \
         VALIDATION_STRINGENCY=SILENT \
         EXPECTED_ORIENTATIONS=FR \
@@ -1856,7 +1856,7 @@ task ParallelMongoAlignToMtRegShiftedAndMetrics {
         UNMAP_CONTAMINANT_READS=true \
         ADD_PG_TAG_TO_READS=false
 
-      java -Xms3000m "-Xmx~{command_mem}m" -jar /usr/gitc/picard.jar \
+      java -Xms33072m "-Xmx~{command_mem}m" -jar /usr/gitc/picard.jar \
         MarkDuplicates \
         INPUT=mba.bam \
         OUTPUT=md.bam \
@@ -1868,7 +1868,7 @@ task ParallelMongoAlignToMtRegShiftedAndMetrics {
         CLEAR_DT="false" \
         ADD_PG_TAG_TO_READS=false
 
-      java -Xms3000m "-Xmx~{command_mem}m" -jar /usr/gitc/picard.jar \
+      java -Xms3072m "-Xmx~{command_mem}m" -jar /usr/gitc/picard.jar \
         SortSam \
         INPUT=md.bam \
         OUTPUT="~{d}{this_output_bam_basename}_pre_mt_filt.bam" \
@@ -1877,7 +1877,7 @@ task ParallelMongoAlignToMtRegShiftedAndMetrics {
         MAX_RECORDS_IN_RAM=300000
 
       # now we have to subset to mito and update sequence dictionary
-      java -Xms3000m "-Xmx~{command_mem}m" -jar /usr/gitc/picard.jar \
+      java -Xms3072m "-Xmx~{command_mem}m" -jar /usr/gitc/picard.jar \
         ReorderSam \
         I="~{d}{this_output_bam_basename}_pre_mt_filt.bam" \
         O="~{d}{this_output_bam_basename}.bam" \
@@ -1889,14 +1889,14 @@ task ParallelMongoAlignToMtRegShiftedAndMetrics {
       # set the bash variable needed for the command-line
       /usr/gitc/bwa index "~{d}{this_mt_shifted_cat_fasta}"
       bash_ref_fasta="~{d}{this_mt_shifted_cat_fasta}"
-      java -Xms3000m "-Xmx~{command_mem}m" -jar /usr/gitc/picard.jar \
+      java -Xms3072m "-Xmx~{command_mem}m" -jar /usr/gitc/picard.jar \
         SamToFastq \
         INPUT="~{d}{this_bam}" \
         FASTQ=/dev/stdout \
         INTERLEAVE=true \
         NON_PF=true | \
       /usr/gitc/~{this_bwa_commandline} /dev/stdin - 2> >(tee "~{d}{this_output_bam_basename}.shifted.bwa.stderr.log" >&2) | \
-      java -Xms3000m "-Xmx~{command_mem}m" -jar /usr/gitc/picard.jar \
+      java -Xms3072m "-Xmx~{command_mem}m" -jar /usr/gitc/picard.jar \
         MergeBamAlignment \
         VALIDATION_STRINGENCY=SILENT \
         EXPECTED_ORIENTATIONS=FR \
@@ -1925,7 +1925,7 @@ task ParallelMongoAlignToMtRegShiftedAndMetrics {
         UNMAP_CONTAMINANT_READS=true \
         ADD_PG_TAG_TO_READS=false
 
-      java -Xms3000m "-Xmx~{command_mem}m" -jar /usr/gitc/picard.jar \
+      java -Xms3072m "-Xmx~{command_mem}m" -jar /usr/gitc/picard.jar \
         MarkDuplicates \
         INPUT=mba.shifted.bam \
         OUTPUT=md.shifted.bam \
@@ -1937,7 +1937,7 @@ task ParallelMongoAlignToMtRegShiftedAndMetrics {
         CLEAR_DT="false" \
         ADD_PG_TAG_TO_READS=false
 
-      java -Xms3000m "-Xmx~{command_mem}m" -jar /usr/gitc/picard.jar \
+      java -Xms3072m "-Xmx~{command_mem}m" -jar /usr/gitc/picard.jar \
         SortSam \
         INPUT=md.shifted.bam \
         OUTPUT="~{d}{this_output_bam_basename}.shifted_pre_mt_filt.bam" \
@@ -1946,7 +1946,7 @@ task ParallelMongoAlignToMtRegShiftedAndMetrics {
         MAX_RECORDS_IN_RAM=300000
 
       # now we have to subset to mito and update sequence dictionary
-      java -Xms3000m "-Xmx~{command_mem}m" -jar /usr/gitc/picard.jar \
+      java -Xms3072m "-Xmx~{command_mem}m" -jar /usr/gitc/picard.jar \
         ReorderSam \
         I="~{d}{this_output_bam_basename}.shifted_pre_mt_filt.bam" \
         O="~{d}{this_output_bam_basename}.shifted.bam" \
@@ -1955,7 +1955,7 @@ task ParallelMongoAlignToMtRegShiftedAndMetrics {
         CREATE_INDEX=true
 
       echo "Now collecting wgs metrics..."
-      java -Xms3000m "-Xmx~{command_mem}m" -jar /usr/gitc/picard.jar \
+      java -Xms3072m "-Xmx~{command_mem}m" -jar /usr/gitc/picard.jar \
         CollectWgsMetrics \
         INPUT="~{d}{this_output_bam_basename}.bam" \
         INTERVALS="~{d}{this_mt_intervals}" \
@@ -2015,7 +2015,7 @@ task ParallelMongoAlignToMtRegShiftedAndMetrics {
     cpu: this_cpu
     disks: "local-disk " + disk_size + " SSD"
     docker: "us.gcr.io/broad-gotc-prod/genomes-in-the-cloud:2.4.2-1552931386"
-    dx_instance_type: "azure:mem2_ssd1_x16"
+    dx_instance_type: "mem3_ssd1_x16"
   }
   output {
     Object obj_out = read_json('out/jsonout.json')
