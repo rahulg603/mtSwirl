@@ -206,7 +206,16 @@ task ParallelMongoProcessBamAndRevert {
       this_sample_t=$(echo $this_sample | cut -d' ' -f$((idx+1)))
       this_sample="out/$this_sample_t"
 
-      R --vanilla -e 'vec <- readLines("~{d}{this_flagstat}");titles <- c("total", "secondary", "supplementary", "duplicates", "mapped", "paired", "read1", "read2", "properly_paired", "with_itself_and_mate_mapped", "singletons", "mate_diff_chr", "mate_diff_chr_mapq_5");get_ele <- function(x) gregexpr("^[0-9]+",x)[[1]];results_vec <- as.numeric(sapply(vec, function(x) substr(x, get_ele(x)[1], get_ele(x)[1] + attr(get_ele(x), "match.length") - 1)));names(results_vec) <- titles;df <- do.call(data.frame, as.list(results_vec));write.table(df, sep ="\t", row.names = F, file = "~{d}{this_sample}.flagstat.txt", quote = F)'
+      R --vanilla <<EOF 
+        vec <- readLines("~{d}{this_flagstat}")
+        titles <- c("total", "secondary", "supplementary", "duplicates", "mapped", "paired", "read1", "read2", "properly_paired", "with_itself_and_mate_mapped", "singletons", "mate_diff_chr", "mate_diff_chr_mapq_5")
+        get_ele <- function(x) gregexpr("^[0-9]+",x)[[1]]
+        results_vec <- as.numeric(sapply(vec, function(x) substr(x, get_ele(x)[1], get_ele(x)[1] + attr(get_ele(x), "match.length") - 1)))
+        names(results_vec) <- titles
+        df <- do.call(data.frame, as.list(results_vec))
+        write.table(df, sep ="\t", row.names = F, file = "~{d}{this_sample}.flagstat.txt", quote = F)
+      EOF
+      
       ls out
       gatk CollectQualityYieldMetrics \
       -I "~{d}{this_bam}" \
@@ -261,7 +270,11 @@ task ParallelMongoProcessBamAndRevert {
         INCLUDE_BQ_HISTOGRAM=true \
         THEORETICAL_SENSITIVITY_OUTPUT="~{d}{this_sample}.theoretical_sensitivity.txt"
 
-      R --vanilla -e 'df = read.table("~{d}{this_sample}.wgs_metrics.txt",skip=6,header=TRUE,stringsAsFactors=FALSE,sep='\t',nrows=1);write.table(floor(df[,"MEAN_COVERAGE"]), "~{d}{this_sample}.mean_coverage.txt", quote=F, col.names=F, row.names=F);write.table(df[,"MEDIAN_COVERAGE"], "~{d}{this_sample}.median_coverage.txt", quote=F, col.names=F, row.names=F)'
+      R --vanilla <<EOF
+        df = read.table("~{d}{this_sample}.wgs_metrics.txt",skip=6,header=TRUE,stringsAsFactors=FALSE,sep='\t',nrows=1)
+        write.table(floor(df[,"MEAN_COVERAGE"]), "~{d}{this_sample}.mean_coverage.txt", quote=F, col.names=F, row.names=F)
+        write.table(df[,"MEDIAN_COVERAGE"], "~{d}{this_sample}.median_coverage.txt", quote=F, col.names=F, row.names=F)
+      EOF
 
       echo "Now preprocessing subsetted bam..."
       gatk --java-options "-Xmx~{command_mem}m" MarkDuplicates \
@@ -415,15 +428,15 @@ task MongoSubsetBamToChrMAndRevert {
 
         /usr/bin/samtools-1.9/samtools flagstat "~{d}{this_bam}" --threads ~{nthreads} > "~{d}{this_sample}.flagstat.pre.txt"
 
-        R --vanilla <<CODE
-        vec <- readLines("~{d}{this_sample}.flagstat.pre.txt")
-        titles <- c('total', 'secondary', 'supplementary', 'duplicates', 'mapped', 'paired', 'read1', 'read2', 'properly_paired', 'with_itself_and_mate_mapped', 'singletons', 'mate_diff_chr', 'mate_diff_chr_mapq_5')
-        get_ele <- function(x) gregexpr('^[0-9]+',x)[[1]]
-        results_vec <- as.numeric(sapply(vec, function(x) substr(x, get_ele(x)[1], get_ele(x)[1] + attr(get_ele(x), 'match.length') - 1)))
-        names(results_vec) <- titles
-        df <- do.call(data.frame, as.list(results_vec))
-        write.table(df, sep ='\t', row.names = F, file = "~{d}{this_sample}.flagstat.txt", quote = F)
-        CODE
+        R --vanilla <<EOF
+          vec <- readLines("~{d}{this_sample}.flagstat.pre.txt")
+          titles <- c('total', 'secondary', 'supplementary', 'duplicates', 'mapped', 'paired', 'read1', 'read2', 'properly_paired', 'with_itself_and_mate_mapped', 'singletons', 'mate_diff_chr', 'mate_diff_chr_mapq_5')
+          get_ele <- function(x) gregexpr('^[0-9]+',x)[[1]]
+          results_vec <- as.numeric(sapply(vec, function(x) substr(x, get_ele(x)[1], get_ele(x)[1] + attr(get_ele(x), 'match.length') - 1)))
+          names(results_vec) <- titles
+          df <- do.call(data.frame, as.list(results_vec))
+          write.table(df, sep ='\t', row.names = F, file = "~{d}{this_sample}.flagstat.txt", quote = F)
+        EOF
 
         gatk --java-options "-Xmx~{command_mem}m" PrintReads \
           ~{"-R " + ref_fasta} \
@@ -490,11 +503,11 @@ task MongoSubsetBamToChrMAndRevert {
           INCLUDE_BQ_HISTOGRAM=true \
           THEORETICAL_SENSITIVITY_OUTPUT="~{d}{this_sample}.theoretical_sensitivity.txt"
 
-        R --vanilla <<CODE
-        df = read.table("~{d}{this_sample}.wgs_metrics.txt",skip=6,header=TRUE,stringsAsFactors=FALSE,sep='\t',nrows=1)
-        write.table(floor(df[,"MEAN_COVERAGE"]), "~{d}{this_sample}.mean_coverage.txt", quote=F, col.names=F, row.names=F)
-        write.table(df[,"MEDIAN_COVERAGE"], "~{d}{this_sample}.median_coverage.txt", quote=F, col.names=F, row.names=F)
-        CODE
+        R --vanilla <<EOF
+          df = read.table("~{d}{this_sample}.wgs_metrics.txt",skip=6,header=TRUE,stringsAsFactors=FALSE,sep='\t',nrows=1)
+          write.table(floor(df[,"MEAN_COVERAGE"]), "~{d}{this_sample}.mean_coverage.txt", quote=F, col.names=F, row.names=F)
+          write.table(df[,"MEDIAN_COVERAGE"], "~{d}{this_sample}.median_coverage.txt", quote=F, col.names=F, row.names=F)
+        EOF
 
         echo "Now preprocessing subsetted bam..."
         gatk --java-options "-Xmx~{command_mem}m" MarkDuplicates \
@@ -538,15 +551,15 @@ task MongoSubsetBamToChrMAndRevert {
    
     done
 
-    python <<CODE
-    import json
-    from math import ceil
-    with open("out/jsonout.json", 'r') as json_file:    
-      file_of_interest = json.load(json_file)
-    this_max = ceil(max(file_of_interest['mean_coverage']))
-    with open('this_max.txt', 'w') as f:
-      f.write(str(this_max))
-    CODE
+    python <<EOF
+      import json
+      from math import ceil
+      with open("out/jsonout.json", 'r') as json_file:    
+        file_of_interest = json.load(json_file)
+      this_max = ceil(max(file_of_interest['mean_coverage']))
+      with open('this_max.txt', 'w') as f:
+        f.write(str(this_max))
+    EOF
   >>>
   runtime {
     memory: machine_mem + " GB"
@@ -730,27 +743,27 @@ task MongoProduceSelfReference {
       samtools faidx "~{d}{this_nuc_only_fasta}"
 
       echo "Now shifting the reference..."
-      R --vanilla <<CODE
-      full_fasta <- readLines("~{d}{this_mt_fasta}")
-      topline <- full_fasta[1]
-      linelen <- nchar(full_fasta[2])
-      n_shift <- ~{n_shift}
-      other_lines <- paste0(full_fasta[2:length(full_fasta)],collapse='')
-      other_lines_shifted <- paste0(substr(other_lines, n_shift+1, nchar(other_lines)), substr(other_lines, 1, n_shift))
-      len_chr <- nchar(other_lines_shifted)
-      shifted_split <- substring(other_lines_shifted, seq(1, len_chr, linelen), unique(c(seq(linelen, len_chr, linelen), len_chr)))
-      final_data <- c(topline, shifted_split)
-      writeLines(final_data, "~{d}{this_fasta_shifted}")
-      
-      total_len <- nchar(other_lines)
-      sec1 <- paste(c('chain',9999,'chrM',total_len,'+', 0,total_len-n_shift, 'chrM', total_len, '+', n_shift, total_len, 1),collapse=' ')
-      sec2 <- paste(c('chain',9999,'chrM',total_len,'+', total_len-n_shift,total_len, 'chrM', total_len, '+', 0, n_shift, 2),collapse=' ')
-      writeLines(c(sec1, total_len-n_shift, '', sec2, n_shift, ''), "~{d}{this_chain_shifted}")
-      
-      sec1_f <- paste(c('chain',9999,'chrM',total_len,'+', n_shift,total_len, 'chrM', total_len, '+', 0, total_len-n_shift, 1),collapse=' ')
-      sec2_f <- paste(c('chain',9999,'chrM',total_len,'+', 0, n_shift, 'chrM', total_len, '+', total_len-n_shift, total_len, 2),collapse=' ')
-      writeLines(c(sec1_f, total_len-n_shift, '', sec2_f, n_shift, ''), "~{d}{this_chain_fwd_shifted}")
-      CODE
+      R --vanilla <<EOF
+        full_fasta <- readLines("~{d}{this_mt_fasta}")
+        topline <- full_fasta[1]
+        linelen <- nchar(full_fasta[2])
+        n_shift <- ~{n_shift}
+        other_lines <- paste0(full_fasta[2:length(full_fasta)],collapse='')
+        other_lines_shifted <- paste0(substr(other_lines, n_shift+1, nchar(other_lines)), substr(other_lines, 1, n_shift))
+        len_chr <- nchar(other_lines_shifted)
+        shifted_split <- substring(other_lines_shifted, seq(1, len_chr, linelen), unique(c(seq(linelen, len_chr, linelen), len_chr)))
+        final_data <- c(topline, shifted_split)
+        writeLines(final_data, "~{d}{this_fasta_shifted}")
+        
+        total_len <- nchar(other_lines)
+        sec1 <- paste(c('chain',9999,'chrM',total_len,'+', 0,total_len-n_shift, 'chrM', total_len, '+', n_shift, total_len, 1),collapse=' ')
+        sec2 <- paste(c('chain',9999,'chrM',total_len,'+', total_len-n_shift,total_len, 'chrM', total_len, '+', 0, n_shift, 2),collapse=' ')
+        writeLines(c(sec1, total_len-n_shift, '', sec2, n_shift, ''), "~{d}{this_chain_shifted}")
+        
+        sec1_f <- paste(c('chain',9999,'chrM',total_len,'+', n_shift,total_len, 'chrM', total_len, '+', 0, total_len-n_shift, 1),collapse=' ')
+        sec2_f <- paste(c('chain',9999,'chrM',total_len,'+', 0, n_shift, 'chrM', total_len, '+', total_len-n_shift, total_len, 2),collapse=' ')
+        writeLines(c(sec1_f, total_len-n_shift, '', sec2_f, n_shift, ''), "~{d}{this_chain_fwd_shifted}")
+      EOF
 
       cat "~{d}{this_fasta_shifted}" "~{d}{this_nuc_only_fasta}" > "~{d}{this_fasta_cat_shifted}"
 
@@ -768,16 +781,16 @@ task MongoProduceSelfReference {
       samtools faidx "~{d}{this_fasta_shifted}"
 
       echo "Now adjusting the MT interval list..."
-      R --vanilla <<CODE
-      intervals <- readLines("~{mt_interval_list}")
-      intervals <- intervals[grep('^@', intervals, invert=T)]
-      interval_names <- sapply(strsplit(intervals, '\t'),function(x)x[5])
-      new_header <- readLines("~{d}{this_basename}.dict")
-      lens <- sapply(interval_names, function(x)as.numeric(gsub('LN:','',strsplit(new_header[grep(paste0('^@SQ\tSN:',x), new_header)[1]], '\t')[[1]][3])))
-      if(any(is.na(lens))) stop('ERROR: Some NUMT intervals were not found in the mt_andNuc sequence dictionary.')
-      new_intervals <- c(new_header, paste(interval_names, 1, lens, '+', interval_names, sep='\t'))
-      writeLines(new_intervals, "~{d}{this_mt_intervals}")
-      CODE
+      R --vanilla <<EOF
+        intervals <- readLines("~{mt_interval_list}")
+        intervals <- intervals[grep('^@', intervals, invert=T)]
+        interval_names <- sapply(strsplit(intervals, '\t'),function(x)x[5])
+        new_header <- readLines("~{d}{this_basename}.dict")
+        lens <- sapply(interval_names, function(x)as.numeric(gsub('LN:','',strsplit(new_header[grep(paste0('^@SQ\tSN:',x), new_header)[1]], '\t')[[1]][3])))
+        if(any(is.na(lens))) stop('ERROR: Some NUMT intervals were not found in the mt_andNuc sequence dictionary.')
+        new_intervals <- c(new_header, paste(interval_names, 1, lens, '+', interval_names, sep='\t'))
+        writeLines(new_intervals, "~{d}{this_mt_intervals}")
+      EOF
 
       echo "Now shifting the noncontrol region..."
       java -jar /usr/gitc/picard.jar LiftOverIntervalList \
@@ -787,94 +800,94 @@ task MongoProduceSelfReference {
         CHAIN="~{d}{this_mt_chain}"
 
       echo "Now shifting the control region..."
-      R --vanilla <<CODE
-      full_intervals <- readLines("~{d}{this_nonctrl_interval}")
-      correct_dict <- readLines("~{d}{this_shifted_basename}.dict")
-      n_shift <- ~{n_shift}
-      if (length(full_intervals) > 3) {
-        stop('ERROR: there should be only 3 lines in interval list.')
-      }
-      if ((length(grep('^@', full_intervals)) != 2) | (length(grep('^chrM', full_intervals)) != 1)) {
-        stop('ERROR: there should be 2 comment lines and one interval line on chrM')
-      }
-      out_intervals <- c(full_intervals[1], correct_dict[2])
-      split_line2 <- strsplit(out_intervals[2],'\t')[[1]]
-      this_len <- as.numeric(gsub('^LN:','',split_line2[grep('^LN', split_line2)[1]]))
+      R --vanilla <<EOF
+        full_intervals <- readLines("~{d}{this_nonctrl_interval}")
+        correct_dict <- readLines("~{d}{this_shifted_basename}.dict")
+        n_shift <- ~{n_shift}
+        if (length(full_intervals) > 3) {
+          stop('ERROR: there should be only 3 lines in interval list.')
+        }
+        if ((length(grep('^@', full_intervals)) != 2) | (length(grep('^chrM', full_intervals)) != 1)) {
+          stop('ERROR: there should be 2 comment lines and one interval line on chrM')
+        }
+        out_intervals <- c(full_intervals[1], correct_dict[2])
+        split_line2 <- strsplit(out_intervals[2],'\t')[[1]]
+        this_len <- as.numeric(gsub('^LN:','',split_line2[grep('^LN', split_line2)[1]]))
 
-      interval <- strsplit(full_intervals[3],'\t')[[1]]
-      new_end <- as.numeric(interval[2]) - 1 + this_len - n_shift
-      new_start <- as.numeric(interval[3]) + 1 - n_shift
-      interval[2:3] <- c(as.character(new_start), as.character(new_end))
-      out_intervals <- c(out_intervals, paste0(interval, collapse='\t'))
+        interval <- strsplit(full_intervals[3],'\t')[[1]]
+        new_end <- as.numeric(interval[2]) - 1 + this_len - n_shift
+        new_start <- as.numeric(interval[3]) + 1 - n_shift
+        interval[2:3] <- c(as.character(new_start), as.character(new_end))
+        out_intervals <- c(out_intervals, paste0(interval, collapse='\t'))
 
-      writeLines(out_intervals, "~{d}{this_ctrl_interval}")
-      CODE
+        writeLines(out_intervals, "~{d}{this_ctrl_interval}")
+      EOF
 
       echo "Now making force call variants..."
-      python3.7 <<CODE
-      import hail as hl
+      python3.7 <<EOF
+        import hail as hl
 
-      def fai_to_len(fai):
-          with open(fai) as f:
-              line = f.readline()
-          return int(line.split('\t')[1])
+        def fai_to_len(fai):
+            with open(fai) as f:
+                line = f.readline()
+            return int(line.split('\t')[1])
 
-      def check_vcf_integrity(mt):
-          # check that locus, alleles are the two key fields
-          if sorted(list(mt.row_key)) != ['alleles', 'locus']:
-              raise ValueError('VCFs must always be keyed by locus, alleles.')
-          
-          # check that all sites are bi-allelic
-          if mt.aggregate_rows(~hl.agg.all(hl.len(mt.alleles) == 2)):
-              raise ValueError('This function only supports biallelic sites (run SplitMultiAllelics!)')
-          
-          # check that there is no missingness in locus
-          if mt.aggregate_rows(~hl.agg.all(hl.is_defined(mt.locus))):
-              raise ValueError('ERROR: locus must always be defined, both before and after Liftover. This should be a reversible operation, thus finding missing loci after reverse liftover is very concerning.')
+        def check_vcf_integrity(mt):
+            # check that locus, alleles are the two key fields
+            if sorted(list(mt.row_key)) != ['alleles', 'locus']:
+                raise ValueError('VCFs must always be keyed by locus, alleles.')
+            
+            # check that all sites are bi-allelic
+            if mt.aggregate_rows(~hl.agg.all(hl.len(mt.alleles) == 2)):
+                raise ValueError('This function only supports biallelic sites (run SplitMultiAllelics!)')
+            
+            # check that there is no missingness in locus
+            if mt.aggregate_rows(~hl.agg.all(hl.is_defined(mt.locus))):
+                raise ValueError('ERROR: locus must always be defined, both before and after Liftover. This should be a reversible operation, thus finding missing loci after reverse liftover is very concerning.')
 
-          # check that there is no missingness in alleles
-          if mt.aggregate_rows(~hl.agg.all(hl.all(hl.map(hl.is_defined, mt.alleles)))):
-              raise ValueError('ERROR: alleles should always be defined.')
+            # check that there is no missingness in alleles
+            if mt.aggregate_rows(~hl.agg.all(hl.all(hl.map(hl.is_defined, mt.alleles)))):
+                raise ValueError('ERROR: alleles should always be defined.')
 
-      def apply_conversion(mt, liftover_target, skip_flip=False):
-          mt_lifted = mt.annotate_rows(new_locus = hl.liftover(mt.locus, liftover_target))
-          if skip_flip:
-            mt_lifted = mt_lifted.annotate_rows(allele_flip = mt_lifted.alleles)
-          else:
-            mt_lifted = mt_lifted.annotate_rows(allele_flip = hl.reversed(mt_lifted.alleles))
-          mt_lifted = mt_lifted.key_rows_by().rename({'locus':'locus_orig', 'alleles':'alleles_orig'}).rename({'new_locus':'locus', 'allele_flip': 'alleles'}).key_rows_by('locus','alleles')
-          mt_lifted = mt_lifted.drop('locus_orig', 'alleles_orig')
+        def apply_conversion(mt, liftover_target, skip_flip=False):
+            mt_lifted = mt.annotate_rows(new_locus = hl.liftover(mt.locus, liftover_target))
+            if skip_flip:
+              mt_lifted = mt_lifted.annotate_rows(allele_flip = mt_lifted.alleles)
+            else:
+              mt_lifted = mt_lifted.annotate_rows(allele_flip = hl.reversed(mt_lifted.alleles))
+            mt_lifted = mt_lifted.key_rows_by().rename({'locus':'locus_orig', 'alleles':'alleles_orig'}).rename({'new_locus':'locus', 'allele_flip': 'alleles'}).key_rows_by('locus','alleles')
+            mt_lifted = mt_lifted.drop('locus_orig', 'alleles_orig')
 
-          return mt_lifted
+            return mt_lifted
 
-      target = hl.ReferenceGenome("target_self", ['chrM'], {'chrM':fai_to_len("~{d}{this_mt_fasta}.fai")}, mt_contigs=['chrM'])
-      source = hl.ReferenceGenome('mtGRCh38', ['chrM'], {'chrM':fai_to_len("~{mt_ref_fasta_index}")}, mt_contigs=['chrM'])
-      target.add_sequence("~{d}{this_mt_fasta}", "~{d}{this_mt_fasta}.fai")
-      source.add_sequence("~{mt_ref_fasta}", "~{mt_ref_fasta_index}")
-      source.add_liftover("~{d}{this_mt_chain}", "target_self")
-      shifted_target = hl.ReferenceGenome("target_self_shifted", ['chrM'], {'chrM':fai_to_len("~{d}{this_fasta_shifted}.fai")}, mt_contigs=['chrM'])
-      shifted_target.add_sequence("~{d}{this_fasta_shifted}", "~{d}{this_fasta_shifted}.fai")
-      target.add_liftover("~{d}{this_chain_fwd_shifted}", shifted_target)
+        target = hl.ReferenceGenome("target_self", ['chrM'], {'chrM':fai_to_len("~{d}{this_mt_fasta}.fai")}, mt_contigs=['chrM'])
+        source = hl.ReferenceGenome('mtGRCh38', ['chrM'], {'chrM':fai_to_len("~{mt_ref_fasta_index}")}, mt_contigs=['chrM'])
+        target.add_sequence("~{d}{this_mt_fasta}", "~{d}{this_mt_fasta}.fai")
+        source.add_sequence("~{mt_ref_fasta}", "~{mt_ref_fasta_index}")
+        source.add_liftover("~{d}{this_mt_chain}", "target_self")
+        shifted_target = hl.ReferenceGenome("target_self_shifted", ['chrM'], {'chrM':fai_to_len("~{d}{this_fasta_shifted}.fai")}, mt_contigs=['chrM'])
+        shifted_target.add_sequence("~{d}{this_fasta_shifted}", "~{d}{this_fasta_shifted}.fai")
+        target.add_liftover("~{d}{this_chain_fwd_shifted}", shifted_target)
 
-      mt_new = hl.import_vcf("~{d}{this_filt_vcf}", reference_genome='mtGRCh38').select_entries()
-      check_vcf_integrity(mt_new)
+        mt_new = hl.import_vcf("~{d}{this_filt_vcf}", reference_genome='mtGRCh38').select_entries()
+        check_vcf_integrity(mt_new)
 
-      mt_new_1 = mt_new.select_rows()
-      mt_lifted_target = apply_conversion(mt_new_1, "target_self")
-      check_vcf_integrity(mt_lifted_target)
-      hl.export_vcf(mt_lifted_target, "~{d}{this_vcf_bgz}", tabix=True)
+        mt_new_1 = mt_new.select_rows()
+        mt_lifted_target = apply_conversion(mt_new_1, "target_self")
+        check_vcf_integrity(mt_lifted_target)
+        hl.export_vcf(mt_lifted_target, "~{d}{this_vcf_bgz}", tabix=True)
 
-      mt_new_2 = mt_new.select_rows('filters')
-      this_metadata = hl.get_vcf_metadata("~{d}{this_filt_vcf}")
-      this_metadata = {'filter': this_metadata['filter']}
-      mt_lifted_target_withfilter = apply_conversion(mt_new_2, "target_self")
-      check_vcf_integrity(mt_lifted_target_withfilter)
-      hl.export_vcf(mt_lifted_target_withfilter, "~{d}{this_vcf_filters_bgz}", tabix=True, metadata=this_metadata)
-      
-      mt_lifted_shifted_target = apply_conversion(mt_lifted_target, "target_self_shifted", skip_flip=True)
-      check_vcf_integrity(mt_lifted_shifted_target)
-      hl.export_vcf(mt_lifted_shifted_target, "~{d}{this_vcf_shifted_bgz}", tabix=True)
-    CODE
+        mt_new_2 = mt_new.select_rows('filters')
+        this_metadata = hl.get_vcf_metadata("~{d}{this_filt_vcf}")
+        this_metadata = {'filter': this_metadata['filter']}
+        mt_lifted_target_withfilter = apply_conversion(mt_new_2, "target_self")
+        check_vcf_integrity(mt_lifted_target_withfilter)
+        hl.export_vcf(mt_lifted_target_withfilter, "~{d}{this_vcf_filters_bgz}", tabix=True, metadata=this_metadata)
+        
+        mt_lifted_shifted_target = apply_conversion(mt_lifted_target, "target_self_shifted", skip_flip=True)
+        check_vcf_integrity(mt_lifted_shifted_target)
+        hl.export_vcf(mt_lifted_shifted_target, "~{d}{this_vcf_shifted_bgz}", tabix=True)
+    EOF
 
     python ~{JsonTools} \
     --path out_selfref/jsonout.json \
@@ -1955,11 +1968,11 @@ task ParallelMongoAlignToMtRegShiftedAndMetrics {
         INCLUDE_BQ_HISTOGRAM=true \
         THEORETICAL_SENSITIVITY_OUTPUT="~{d}{this_sample}_r2_wgs_theoretical_sensitivity.txt"
 
-      R --vanilla <<CODE
-      df = read.table("~{d}{this_sample}_r2_wgs_metrics.txt",skip=6,header=TRUE,stringsAsFactors=FALSE,sep='\t',nrows=1)
-      write.table(floor(df[,"MEAN_COVERAGE"]), "~{d}{this_sample}_r2_mean_coverage.txt", quote=F, col.names=F, row.names=F)
-      write.table(df[,"MEDIAN_COVERAGE"], "~{d}{this_sample}_r2_median_coverage.txt", quote=F, col.names=F, row.names=F)
-      CODE
+      R --vanilla <<EOF
+        df = read.table("~{d}{this_sample}_r2_wgs_metrics.txt",skip=6,header=TRUE,stringsAsFactors=FALSE,sep='\t',nrows=1)
+        write.table(floor(df[,"MEAN_COVERAGE"]), "~{d}{this_sample}_r2_mean_coverage.txt", quote=F, col.names=F, row.names=F)
+        write.table(df[,"MEDIAN_COVERAGE"], "~{d}{this_sample}_r2_median_coverage.txt", quote=F, col.names=F, row.names=F)
+      EOF
       {
         flock 200
         python ~{JsonTools} \
@@ -1986,15 +1999,15 @@ task ParallelMongoAlignToMtRegShiftedAndMetrics {
     n_cpu=$(nproc)
     seq 0 $((~{length(input_bam)}-1)) | xargs -n 1 -P ~{select_first([n_cpu, 1])} -I {} bash -c 'align_to_mt_reg_shifted_metrics "$@"' _ {}
 
-    python <<CODE
-    import json
-    from math import ceil
-    with open("out/jsonout.json", 'r') as json_file:    
-      file_of_interest = json.load(json_file)
-    this_max = ceil(max(file_of_interest['mean_coverage']))
-    with open('this_max_r2.txt', 'w') as f:
-      f.write(str(this_max))
-    CODE
+    python <<EOF
+      import json
+      from math import ceil
+      with open("out/jsonout.json", 'r') as json_file:    
+        file_of_interest = json.load(json_file)
+      this_max = ceil(max(file_of_interest['mean_coverage']))
+      with open('this_max_r2.txt', 'w') as f:
+        f.write(str(this_max))
+    EOF
   >>>
   runtime {
     preemptible: select_first([preemptible_tries, 5])
@@ -2603,29 +2616,29 @@ task MongoLiftoverVCFAndGetCoverage {
         COVMAX=20000 \
         SAMPLE_SIZE=1
 
-      R --vanilla <<CODE
-      full_fasta <- readLines("~{d}{this_self_fasta}") # edited to account for variable reference sizes
-      nlen <- nchar(paste0(full_fasta[2:length(full_fasta)],collapse=''))
-      nshift <- 8000
-      shift_back <- function(x) {
-        if (x < (nlen-nshift+1)) {
-          return(x + nshift)
-        } else {
-          return (x - (nlen-nshift))
+      R --vanilla <<EOF
+        full_fasta <- readLines("~{d}{this_self_fasta}") # edited to account for variable reference sizes
+        nlen <- nchar(paste0(full_fasta[2:length(full_fasta)],collapse=''))
+        nshift <- 8000
+        shift_back <- function(x) {
+          if (x < (nlen-nshift+1)) {
+            return(x + nshift)
+          } else {
+            return (x - (nlen-nshift))
+          }
         }
-      }
 
-      control_region_shifted = read.table("control_region_shifted.tsv", header=T)
-      shifted_back = sapply(control_region_shifted[,"pos"], shift_back)
-      control_region_shifted[,"pos"] = shifted_back
+        control_region_shifted = read.table("control_region_shifted.tsv", header=T)
+        shifted_back = sapply(control_region_shifted[,"pos"], shift_back)
+        control_region_shifted[,"pos"] = shifted_back
 
-      beginning = subset(control_region_shifted, control_region_shifted[,'pos']<8000)
-      end = subset(control_region_shifted, control_region_shifted[,'pos']>8000)
+        beginning = subset(control_region_shifted, control_region_shifted[,'pos']<8000)
+        end = subset(control_region_shifted, control_region_shifted[,'pos']>8000)
 
-      non_control_region = read.table("non_control_region.tsv", header=T)
-      combined_table = rbind(beginning, non_control_region, end)
-      write.table(combined_table, "~{d}{this_basename}.per_base_coverage.tsv", row.names=F, col.names=T, quote=F, sep="\t")
-      CODE
+        non_control_region = read.table("non_control_region.tsv", header=T)
+        combined_table = rbind(beginning, non_control_region, end)
+        write.table(combined_table, "~{d}{this_basename}.per_base_coverage.tsv", row.names=F, col.names=T, quote=F, sep="\t")
+      EOF
 
       echo "Now outputting a final table with integers..."
       paste -d "\t" "~{d}{this_basename}.round2liftover.all_int_outputs.txt" <(printf "n_liftover_changed_selfref_and_passed\n$(cat ~{d}{this_sample}_n_ref_pass_thru.txt)\n") <(printf "n_liftover_r1_pass\n$(cat ~{d}{this_sample}_n_pass.txt)\n") <(printf "n_liftover_r2_pass\n$(cat ~{d}{this_sample}_n_final_pass.txt)\n") > "~{d}{this_basename}.round2liftover.all_int_outputs.final.txt"
@@ -2773,138 +2786,136 @@ task MongoLiftoverSelfAndCollectOutputs {
       tail -n +2 "~{d}{this_self_ref_tab}" | awk '{OFS="\t"} {print $1"\t"$2-1"\t"$2"\t"$4}' > per_base_coverage.bed
       liftOver per_base_coverage.bed "~{d}{this_chain}" "~{d}{this_sample}.liftedOver.bed" "~{d}{this_sample}.liftedOver.unmapped"
 
-      R --vanilla <<CODE
-      init_chain <- readLines("~{d}{this_chain}")
-      if (length(grep('^chain', init_chain)) != 1) {
-        stop('ERROR: only single block chain files are currently supported.')
-      }
-      loc_init_chain <- grep('^chain', init_chain)
-      chain_splits = strsplit(init_chain[loc_init_chain],'\\\\s+')
-      if (!all(sapply(chain_splits, function(x)as.numeric(c(x[6], x[11]))) == 0)) {
-        stop('ERROR: chain file must start at 0 for both source and target.')
-      }
-      if (!(1 %in% loc_init_chain)) {
-        stop('ERROR: first line of chain file must be header.')
-      }
-      len_tab <- length(strsplit(init_chain[2],'\t')[[1]])
-      len_spc <- length(strsplit(init_chain[2],' ')[[1]])
-      if (len_tab > len_spc) {
-        sep <- '\t'
-      } else {
-        sep <- ' '
-      }
-
-      chain <- read.csv("~{d}{this_chain}", skip=1, header=F, col.names=c('bases_in_block', 'ns', 'nt'), sep=sep, stringsAsFactors=F, fill=T)
-      chain[nrow(chain),2:3] <- 0
-      if (nrow(chain) == 1) {
-        chain[['coord_s']] = chain[['bases_in_block']]
-        chain[['coord_t']] = chain[['bases_in_block']]
-      } else {
-        chain[['coord_s']] = cumsum(chain[['bases_in_block']]) + cumsum(c(0,chain[['ns']][2:nrow(chain)-1]))
-        chain[['coord_t']] = cumsum(chain[['bases_in_block']]) + cumsum(c(0,chain[['nt']][2:nrow(chain)-1]))
-      }
-      
-      if (any(is.na(chain))) {
-        stop('ERROR: there should be no missing fields in chain.')
-      }
-      if (sum((chain[['ns']] > 0) & (chain[['nt']] > 0)) != 0) {
-        stop('ERROR: Chain files should not have breaks -- e.g., each ungapped block should be followed by a gap in EITHER the source or target, but not both.')
-      }
-
-      start_end_to_bed <- function(start, end_inclusive) {
-        # push start up by one, because INDELs share the first base
-        new_start = start+1
-        ends = end_inclusive
-        if (length(new_start) != length(ends)) {
-          stop('ERROR: starts and ends must have the same length.')
+      R --vanilla <<EOF
+        init_chain <- readLines("~{d}{this_chain}")
+        if (length(grep('^chain', init_chain)) != 1) {
+          stop('ERROR: only single block chain files are currently supported.')
         }
-        if (length(new_start) == 0) {
-          empty_df <- data.frame('chr'='chrM', 'start'=1, 'end'=1)
-          return(empty_df[empty_df[['start']] > 1,])
+        loc_init_chain <- grep('^chain', init_chain)
+        chain_splits = strsplit(init_chain[loc_init_chain],'\\\\s+')
+        if (!all(sapply(chain_splits, function(x)as.numeric(c(x[6], x[11]))) == 0)) {
+          stop('ERROR: chain file must start at 0 for both source and target.')
         }
-        bp = unlist(lapply(1:length(start), function(idx) new_start[idx]:ends[idx]))
-        df = data.frame('chr' = 'chrM', 'start' = bp-1, 'end' = bp)
-        return(df[order(df[['start']]),])
-      }
-
-      bed_entries_missing_in_db <- function(query, db) {
-        if ((nrow(query) > 0) & (nrow(db) > 0)) {
-          return(query[!paste0(query[['start']],':',query[['end']]) %in% paste0(db[['start']],':',db[['end']]),])
+        if (!(1 %in% loc_init_chain)) {
+          stop('ERROR: first line of chain file must be header.')
+        }
+        len_tab <- length(strsplit(init_chain[2],'\t')[[1]])
+        len_spc <- length(strsplit(init_chain[2],' ')[[1]])
+        if (len_tab > len_spc) {
+          sep <- '\t'
         } else {
-          return(query)
+          sep <- ' '
         }
-      }
 
-      n_rows_different_keys_bed <- function(df1, df2) {
-        return(nrow(bed_entries_missing_in_db(df1, df2)) + nrow(bed_entries_missing_in_db(df2, df1)))
-      }
-
-      insertions <- chain[chain[['ns']] > 0,]
-      expected_failed_liftover <- start_end_to_bed(insertions[['coord_s']], insertions[['coord_s']]+insertions[['ns']])
-      failure_bed <- read.csv("~{d}{this_sample}.liftedOver.unmapped", header=F, sep='\t', col.names=c('chr','start','end','cov'), comment.char='#')
-      if (n_rows_different_keys_bed(expected_failed_liftover, failure_bed) > 0) {
-        stop('ERROR: Rejected bed file is not identical to expectation.')
-      }
-
-      target_len <- as.numeric(strsplit(init_chain[1], '\\\\s+')[[1]][9])
-      deletions <- chain[chain[['nt']] > 0,]
-      expected_liftover_gaps <- start_end_to_bed(deletions[['coord_t']], deletions[['coord_t']]+deletions[['nt']])
-      success_bed <- read.csv("~{d}{this_sample}.liftedOver.bed", header=F, sep='\t', col.names=c('chr','start','end','cov'), comment.char='#')
-      full_bed <- data.frame('chr'='chrM', 'start'=0:(target_len-1), 'end'=1:target_len)
-      not_in_success_bed <- bed_entries_missing_in_db(full_bed, success_bed)
-      if (n_rows_different_keys_bed(expected_liftover_gaps, not_in_success_bed) > 0) {
-        stop('ERROR: Success bed file has different gaps than expected based on chain.')
-      }
-      if (nrow(expected_liftover_gaps) == 0) {
-        print('NOTE: No gaps found in coverage file, so no changes were made.')
-        appended_bed <- success_bed
-        appended_bed <- appended_bed[order(appended_bed[['start']]),]
-      } else {
-        fill_in_coverage <- read.csv("~{d}{this_dele_suppl}", sep='\t', stringsAsFactors=F)
-        bed_homoplas_dele <- data.frame('chr'='chrM', 'start'=fill_in_coverage[['reference_position']]-1, 
-                                        'end'=fill_in_coverage[['reference_position']], 'cov'=fill_in_coverage[['ref_allele_depth']])
-        if (n_rows_different_keys_bed(expected_liftover_gaps, bed_homoplas_dele) > 0) {
-          stop('ERROR: Records in homoplasmic_deletions_coverage are different from expected based on chain.')
+        chain <- read.csv("~{d}{this_chain}", skip=1, header=F, col.names=c('bases_in_block', 'ns', 'nt'), sep=sep, stringsAsFactors=F, fill=T)
+        chain[nrow(chain),2:3] <- 0
+        if (nrow(chain) == 1) {
+          chain[['coord_s']] = chain[['bases_in_block']]
+          chain[['coord_t']] = chain[['bases_in_block']]
+        } else {
+          chain[['coord_s']] = cumsum(chain[['bases_in_block']]) + cumsum(c(0,chain[['ns']][2:nrow(chain)-1]))
+          chain[['coord_t']] = cumsum(chain[['bases_in_block']]) + cumsum(c(0,chain[['nt']][2:nrow(chain)-1]))
         }
-        appended_bed <- rbind(success_bed, merge(not_in_success_bed, bed_homoplas_dele, by=c('chr','start','end')))
-        appended_bed <- appended_bed[order(appended_bed[['start']]),]
-        row.names(appended_bed) <- NULL
-        if ((nrow(bed_entries_missing_in_db(full_bed, appended_bed)) > 0) | (!all(appended_bed[['end']] == 1:target_len))) { 
-          stop('ERROR: the final lifted over bed file should have one row per position on the mtDNA.')
+        
+        if (any(is.na(chain))) {
+          stop('ERROR: there should be no missing fields in chain.')
         }
-      }
+        if (sum((chain[['ns']] > 0) & (chain[['nt']] > 0)) != 0) {
+          stop('ERROR: Chain files should not have breaks -- e.g., each ungapped block should be followed by a gap in EITHER the source or target, but not both.')
+        }
 
-      final_tsv <- appended_bed
-      names(final_tsv) <- c('chrom', 'to_rm', 'pos', 'coverage')
-      final_tsv[['target']] <- '.'
-      write.table(final_tsv[,c('chrom','pos','target','coverage')], "~{d}{this_sample}.appended.liftedOver.tsv", row.names=F, sep='\t', quote=F)
-    CODE
+        start_end_to_bed <- function(start, end_inclusive) {
+          # push start up by one, because INDELs share the first base
+          new_start = start+1
+          ends = end_inclusive
+          if (length(new_start) != length(ends)) {
+            stop('ERROR: starts and ends must have the same length.')
+          }
+          if (length(new_start) == 0) {
+            empty_df <- data.frame('chr'='chrM', 'start'=1, 'end'=1)
+            return(empty_df[empty_df[['start']] > 1,])
+          }
+          bp = unlist(lapply(1:length(start), function(idx) new_start[idx]:ends[idx]))
+          df = data.frame('chr' = 'chrM', 'start' = bp-1, 'end' = bp)
+          return(df[order(df[['start']]),])
+        }
 
-    R --vanilla <<CODE
-    dfLiftover = read.csv("~{d}{this_litover_stats}", sep='\t', stringsAsFactors=F)
-    df = data.frame(mean_coverage = "~{d}{this_mean_cov}",
-                    median_coverage = "~{d}{this_median_cov}",
-                    major_haplogroup = "~{d}{this_maj_haplo}",
-                    contamination = "~{d}{this_contam}",
-                    nuc_variants_pass = "~{d}{this_nuc_var_pass}",
-                    n_reads_unpaired_dropped = "~{d}{this_n_reads_drop}",
-                    nuc_variants_dropped = "~{d}{this_nuc_var_drop}",
-                    mtdna_consensus_overlaps = "~{d}{this_mt_overlap}",
-                    nuc_consensus_overlaps = "~{d}{this_nuc_overlap}")
-    write.table(cbind(dfLiftover, df), "~{d}{this_sample}_mtanalysis_diagnostic_statistics.tsv", row.names=F, sep='\t', quote=F)
-    CODE
+        bed_entries_missing_in_db <- function(query, db) {
+          if ((nrow(query) > 0) & (nrow(db) > 0)) {
+            return(query[!paste0(query[['start']],':',query[['end']]) %in% paste0(db[['start']],':',db[['end']]),])
+          } else {
+            return(query)
+          }
+        }
+
+        n_rows_different_keys_bed <- function(df1, df2) {
+          return(nrow(bed_entries_missing_in_db(df1, df2)) + nrow(bed_entries_missing_in_db(df2, df1)))
+        }
+
+        insertions <- chain[chain[['ns']] > 0,]
+        expected_failed_liftover <- start_end_to_bed(insertions[['coord_s']], insertions[['coord_s']]+insertions[['ns']])
+        failure_bed <- read.csv("~{d}{this_sample}.liftedOver.unmapped", header=F, sep='\t', col.names=c('chr','start','end','cov'), comment.char='#')
+        if (n_rows_different_keys_bed(expected_failed_liftover, failure_bed) > 0) {
+          stop('ERROR: Rejected bed file is not identical to expectation.')
+        }
+
+        target_len <- as.numeric(strsplit(init_chain[1], '\\\\s+')[[1]][9])
+        deletions <- chain[chain[['nt']] > 0,]
+        expected_liftover_gaps <- start_end_to_bed(deletions[['coord_t']], deletions[['coord_t']]+deletions[['nt']])
+        success_bed <- read.csv("~{d}{this_sample}.liftedOver.bed", header=F, sep='\t', col.names=c('chr','start','end','cov'), comment.char='#')
+        full_bed <- data.frame('chr'='chrM', 'start'=0:(target_len-1), 'end'=1:target_len)
+        not_in_success_bed <- bed_entries_missing_in_db(full_bed, success_bed)
+        if (n_rows_different_keys_bed(expected_liftover_gaps, not_in_success_bed) > 0) {
+          stop('ERROR: Success bed file has different gaps than expected based on chain.')
+        }
+        if (nrow(expected_liftover_gaps) == 0) {
+          print('NOTE: No gaps found in coverage file, so no changes were made.')
+          appended_bed <- success_bed
+          appended_bed <- appended_bed[order(appended_bed[['start']]),]
+        } else {
+          fill_in_coverage <- read.csv("~{d}{this_dele_suppl}", sep='\t', stringsAsFactors=F)
+          bed_homoplas_dele <- data.frame('chr'='chrM', 'start'=fill_in_coverage[['reference_position']]-1, 
+                                          'end'=fill_in_coverage[['reference_position']], 'cov'=fill_in_coverage[['ref_allele_depth']])
+          if (n_rows_different_keys_bed(expected_liftover_gaps, bed_homoplas_dele) > 0) {
+            stop('ERROR: Records in homoplasmic_deletions_coverage are different from expected based on chain.')
+          }
+          appended_bed <- rbind(success_bed, merge(not_in_success_bed, bed_homoplas_dele, by=c('chr','start','end')))
+          appended_bed <- appended_bed[order(appended_bed[['start']]),]
+          row.names(appended_bed) <- NULL
+          if ((nrow(bed_entries_missing_in_db(full_bed, appended_bed)) > 0) | (!all(appended_bed[['end']] == 1:target_len))) { 
+            stop('ERROR: the final lifted over bed file should have one row per position on the mtDNA.')
+          }
+        }
+
+        final_tsv <- appended_bed
+        names(final_tsv) <- c('chrom', 'to_rm', 'pos', 'coverage')
+        final_tsv[['target']] <- '.'
+        write.table(final_tsv[,c('chrom','pos','target','coverage')], "~{d}{this_sample}.appended.liftedOver.tsv", row.names=F, sep='\t', quote=F)
+      EOF
+
+      R --vanilla <<EOF
+        dfLiftover = read.csv("~{d}{this_litover_stats}", sep='\t', stringsAsFactors=F)
+        df = data.frame(mean_coverage = "~{d}{this_mean_cov}",
+                        median_coverage = "~{d}{this_median_cov}",
+                        major_haplogroup = "~{d}{this_maj_haplo}",
+                        contamination = "~{d}{this_contam}",
+                        nuc_variants_pass = "~{d}{this_nuc_var_pass}",
+                        n_reads_unpaired_dropped = "~{d}{this_n_reads_drop}",
+                        nuc_variants_dropped = "~{d}{this_nuc_var_drop}",
+                        mtdna_consensus_overlaps = "~{d}{this_mt_overlap}",
+                        nuc_consensus_overlaps = "~{d}{this_nuc_overlap}")
+        write.table(cbind(dfLiftover, df), "~{d}{this_sample}_mtanalysis_diagnostic_statistics.tsv", row.names=F, sep='\t', quote=F)
+      EOF
 
       python ~{JsonTools} \
-      --path out/jsonout.json \
-      --set samples="~{d}{sampleNames[i]}" \
-        reference_coverage="~{d}{this_sample}.appended.liftedOver.tsv" \
-        intermediate_bed="~{d}{this_sample}.liftedOver.bed" \
-        rejected="~{d}{this_sample}.liftedOver.unmapped" \
-        table="~{d}{this_sample}_mtanalysis_diagnostic_statistics.tsv"
-    
+        --path out/jsonout.json \
+        --set samples="~{d}{sampleNames[i]}" \
+          reference_coverage="~{d}{this_sample}.appended.liftedOver.tsv" \
+          intermediate_bed="~{d}{this_sample}.liftedOver.bed" \
+          rejected="~{d}{this_sample}.liftedOver.unmapped" \
+          table="~{d}{this_sample}_mtanalysis_diagnostic_statistics.tsv"
     done
   >>>
-
   output {
     Object obj_out = read_json("out/jsonout.json")
     Array[String] samples = obj_out.samples
@@ -2913,7 +2924,6 @@ task MongoLiftoverSelfAndCollectOutputs {
     Array[File] rejected = obj_out.rejected
     Array[File] table = obj_out.table
   }
-
   runtime {
     disks: "local-disk " + disk_size + " HDD"
     memory: "2 GB"
