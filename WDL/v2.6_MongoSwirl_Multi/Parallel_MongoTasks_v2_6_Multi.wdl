@@ -119,7 +119,7 @@ task ParallelMongoSubsetBam {
     export -f process_sample
     # let's overwrite the n cpu by asking bash
     n_cpu=$(nproc)
-    seq 0 $((~{length(input_bam)}-1)) | xargs -n 1 -P ~{select_first([n_cpu, 1])} -I {} bash -c 'process_sample "$@"' _ {}
+    seq 0 $((~{length(input_bam)}-1)) | xargs -n 1 -P ~{n_cpu} -I {} bash -c 'process_sample "$@"' _ {}
   >>>
   runtime {
     # memory: machine_mem + " GB"
@@ -321,7 +321,7 @@ task ParallelMongoProcessBamAndRevert {
     # let's overwrite the n cpu by asking bash
     n_cpu=$(nproc)
     echo "Processing bams across ~{d}{n_cpu} CPUs..."
-    seq 0 $((~{length(subset_bam)}-1)) | xargs -n 1 -P ~{select_first([n_cpu, 1])} -I {} bash -c 'process_sample_and_revert "$@"' _ {}
+    seq 0 $((~{length(subset_bam)}-1)) | xargs -n 1 -P ~{n_cpu} -I {} bash -c 'process_sample_and_revert "$@"' _ {}
 
     echo "Finished processing BAMs, now producing output from json..."
     # call loop then read and compute mean_coverage stat to return and output for next step. if that fails, this is the place
@@ -2007,7 +2007,7 @@ task ParallelMongoAlignToMtRegShiftedAndMetrics {
     export -f align_to_mt_reg_shifted_metrics
     # let's overwrite the n cpu by asking bash
     n_cpu=$(nproc)
-    seq 0 $((~{length(input_bam)}-1)) | xargs -n 1 -P ~{select_first([n_cpu, 1])} -I {} bash -c 'align_to_mt_reg_shifted_metrics "$@"' _ {}
+    seq 0 $((~{length(input_bam)}-1)) | xargs -n 1 -P ~{n_cpu} -I {} bash -c 'align_to_mt_reg_shifted_metrics "$@"' _ {}
 
     python <<EOF
       import json
