@@ -320,15 +320,16 @@ task ParallelMongoProcessBamAndRevert {
     echo "Processing bams across ~{d}{n_cpu} CPUs..."
     seq 0 $((~{length(subset_bam)}-1)) | xargs -n 1 -P ~{select_first([n_cpu, 1])} -I {} bash -c 'process_sample_and_revert "$@"' _ {}
 
+    echo "Finished processing BAMs, now producing output from json..."
     # call loop then read and compute mean_coverage stat to return and output for next step. if that fails, this is the place
     python <<EOF
-      import json
-      from math import ceil
-      with open("out/jsonout.json", 'r') as json_file:    
-        file_of_interest = json.load(json_file)
-      this_max = ceil(max(file_of_interest['mean_coverage']))
-      with open('this_max.txt', 'w') as f:
-        f.write(str(this_max))
+    import json
+    from math import ceil
+    with open("out/jsonout.json", 'r') as json_file:    
+      file_of_interest = json.load(json_file)
+    this_max = ceil(max(file_of_interest['mean_coverage']))
+    with open('this_max.txt', 'w') as f:
+      f.write(str(this_max))
   EOF
   >>>
   runtime {
