@@ -278,7 +278,7 @@ task ParallelMongoProcessBamAndRevert {
       echo "Now preprocessing subsetted bam..."
       gatk --java-options "-Xmx~{command_mem}m" MarkDuplicates \
         INPUT="~{d}{this_bam}" \
-        OUTPUT=md.bam \
+        OUTPUT="~{d}{this_sample}.md.bam" \
         METRICS_FILE="~{d}{this_sample}.duplicate.metrics" \
         VALIDATION_STRINGENCY=SILENT \
         ~{"READ_NAME_REGEX=" + read_name_regex} \
@@ -289,7 +289,7 @@ task ParallelMongoProcessBamAndRevert {
 
       echo "Now sorting md.bam for ~{d}{this_sample_t}"
       gatk --java-options "-Xmx~{command_mem}m" SortSam \
-        INPUT=md.bam \
+        INPUT="~{d}{this_sample}.md.bam" \
         OUTPUT="~{d}{this_sample}.proc.bam" \
         SORT_ORDER="coordinate" \
         CREATE_INDEX=true \
@@ -522,7 +522,7 @@ task MongoSubsetBamToChrMAndRevert {
         echo "Now preprocessing subsetted bam..."
         gatk --java-options "-Xmx~{command_mem}m" MarkDuplicates \
           INPUT="~{d}{this_sample}.bam" \
-          OUTPUT=md.bam \
+          OUTPUT="~{d}{this_sample}.md.bam" \
           METRICS_FILE="~{d}{this_sample}.duplicate.metrics" \
           VALIDATION_STRINGENCY=SILENT \
           ~{"READ_NAME_REGEX=" + read_name_regex} \
@@ -532,7 +532,7 @@ task MongoSubsetBamToChrMAndRevert {
           ADD_PG_TAG_TO_READS=false
 
         gatk --java-options "-Xmx~{command_mem}m" SortSam \
-          INPUT=md.bam \
+          INPUT="~{d}{this_sample}.md.bam" \
           OUTPUT="~{d}{this_sample}.proc.bam" \
           SORT_ORDER="coordinate" \
           CREATE_INDEX=true \
@@ -1846,7 +1846,7 @@ task ParallelMongoAlignToMtRegShiftedAndMetrics {
         ATTRIBUTES_TO_REMOVE=MD \
         ALIGNED_BAM=/dev/stdin \
         UNMAPPED_BAM="~{d}{this_bam}" \
-        OUTPUT=mba.bam \
+        OUTPUT="~{d}{this_sample}.mba.bam" \
         REFERENCE_SEQUENCE="~{d}{this_mt_cat_fasta}" \
         PAIRED_RUN=true \
         SORT_ORDER="unsorted" \
@@ -1868,8 +1868,8 @@ task ParallelMongoAlignToMtRegShiftedAndMetrics {
 
       java -Xms33072m "-Xmx~{command_mem}m" -jar /usr/gitc/picard.jar \
         MarkDuplicates \
-        INPUT=mba.bam \
-        OUTPUT=md.bam \
+        INPUT="~{d}{this_sample}.mba.bam" \
+        OUTPUT="~{d}{this_sample}.md.bam" \
         METRICS_FILE="~{d}{this_output_bam_basename}.metrics" \
         VALIDATION_STRINGENCY=SILENT \
         ~{"READ_NAME_REGEX=" + read_name_regex} \
@@ -1880,7 +1880,7 @@ task ParallelMongoAlignToMtRegShiftedAndMetrics {
 
       java -Xms3072m "-Xmx~{command_mem}m" -jar /usr/gitc/picard.jar \
         SortSam \
-        INPUT=md.bam \
+        INPUT="~{d}{this_sample}.md.bam" \
         OUTPUT="~{d}{this_output_bam_basename}_pre_mt_filt.bam" \
         SORT_ORDER="coordinate" \
         CREATE_INDEX=true \
