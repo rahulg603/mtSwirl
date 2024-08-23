@@ -118,8 +118,8 @@ task ParallelMongoSubsetBam {
     }
     export -f process_sample
     # let's overwrite the n cpu by asking bash
-    n_cpu=$(nproc)
-    seq 0 $((~{length(input_bam)}-1)) | xargs -n 1 -P ~{n_cpu} -I {} bash -c 'process_sample "$@"' _ {}
+    n_cpu_t=$(nproc)
+    seq 0 $((~{length(input_bam)}-1)) | xargs -n 1 -P ~{d}{n_cpu_t} -I {} bash -c 'process_sample "$@"' _ {}
   >>>
   runtime {
     # memory: machine_mem + " GB"
@@ -2007,7 +2007,7 @@ task ParallelMongoAlignToMtRegShiftedAndMetrics {
     export -f align_to_mt_reg_shifted_metrics
     # let's overwrite the n cpu by asking bash
     n_cp_t=$(nproc)
-    seq 0 $((~{length(input_bam)}-1)) | xargs -n 1 -P ~{n_cp_t} -I {} bash -c 'align_to_mt_reg_shifted_metrics "$@"' _ {}
+    seq 0 $((~{length(input_bam)}-1)) | xargs -n 1 -P ~{d}{n_cpu_t} -I {} bash -c 'align_to_mt_reg_shifted_metrics "$@"' _ {}
 
     python <<EOF
       import json
