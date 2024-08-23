@@ -212,7 +212,7 @@ task ParallelMongoProcessBamAndRevert {
         names(results_vec) <- titles
         df <- do.call(data.frame, as.list(results_vec))
         write.table(df, sep ="\t", row.names = F, file = "~{d}{this_sample}.flagstat.txt", quote = F)
-      EOF
+  EOF
       
       ls out
       gatk CollectQualityYieldMetrics \
@@ -272,7 +272,7 @@ task ParallelMongoProcessBamAndRevert {
         df = read.table("~{d}{this_sample}.wgs_metrics.txt",skip=6,header=TRUE,stringsAsFactors=FALSE,sep='\t',nrows=1)
         write.table(floor(df[,"MEAN_COVERAGE"]), "~{d}{this_sample}.mean_coverage.txt", quote=F, col.names=F, row.names=F)
         write.table(df[,"MEDIAN_COVERAGE"], "~{d}{this_sample}.median_coverage.txt", quote=F, col.names=F, row.names=F)
-      EOF
+  EOF
 
       echo "Now preprocessing subsetted bam..."
       gatk --java-options "-Xmx~{command_mem}m" MarkDuplicates \
@@ -311,7 +311,7 @@ task ParallelMongoProcessBamAndRevert {
     n_cpu=$(nproc)
     seq 0 $((~{length(subset_bam)}-1)) | xargs -n 1 -P ~{select_first([n_cpu, 1])} -I {} bash -c 'process_sample_and_revert "$@"' _ {}
 
-    # call loop then read and compute mean_coverage stat to return and output for next step. if that fails, this is the place
+  # call loop then read and compute mean_coverage stat to return and output for next step. if that fails, this is the place
     python <<EOF
       import json
       from math import ceil
@@ -320,7 +320,7 @@ task ParallelMongoProcessBamAndRevert {
       this_max = ceil(max(file_of_interest['mean_coverage']))
       with open('this_max.txt', 'w') as f:
         f.write(str(this_max))
-    EOF
+  EOF
   >>>
   runtime {
     # memory: machine_mem * 10 + " GB"
@@ -434,8 +434,7 @@ task MongoSubsetBamToChrMAndRevert {
           names(results_vec) <- titles
           df <- do.call(data.frame, as.list(results_vec))
           write.table(df, sep ='\t', row.names = F, file = "~{d}{this_sample}.flagstat.txt", quote = F)
-        EOF
-
+  EOF
         gatk --java-options "-Xmx~{command_mem}m" PrintReads \
           ~{"-R " + ref_fasta} \
           ~{"-L " + mt_interval_list} \
@@ -505,7 +504,7 @@ task MongoSubsetBamToChrMAndRevert {
           df = read.table("~{d}{this_sample}.wgs_metrics.txt",skip=6,header=TRUE,stringsAsFactors=FALSE,sep='\t',nrows=1)
           write.table(floor(df[,"MEAN_COVERAGE"]), "~{d}{this_sample}.mean_coverage.txt", quote=F, col.names=F, row.names=F)
           write.table(df[,"MEDIAN_COVERAGE"], "~{d}{this_sample}.median_coverage.txt", quote=F, col.names=F, row.names=F)
-        EOF
+  EOF
 
         echo "Now preprocessing subsetted bam..."
         gatk --java-options "-Xmx~{command_mem}m" MarkDuplicates \
@@ -557,7 +556,7 @@ task MongoSubsetBamToChrMAndRevert {
       this_max = ceil(max(file_of_interest['mean_coverage']))
       with open('this_max.txt', 'w') as f:
         f.write(str(this_max))
-    EOF
+  EOF
   >>>
   runtime {
     # memory: machine_mem + " GB"
@@ -761,7 +760,7 @@ task MongoProduceSelfReference {
         sec1_f <- paste(c('chain',9999,'chrM',total_len,'+', n_shift,total_len, 'chrM', total_len, '+', 0, total_len-n_shift, 1),collapse=' ')
         sec2_f <- paste(c('chain',9999,'chrM',total_len,'+', 0, n_shift, 'chrM', total_len, '+', total_len-n_shift, total_len, 2),collapse=' ')
         writeLines(c(sec1_f, total_len-n_shift, '', sec2_f, n_shift, ''), "~{d}{this_chain_fwd_shifted}")
-      EOF
+  EOF
 
       cat "~{d}{this_fasta_shifted}" "~{d}{this_nuc_only_fasta}" > "~{d}{this_fasta_cat_shifted}"
 
@@ -788,7 +787,7 @@ task MongoProduceSelfReference {
         if(any(is.na(lens))) stop('ERROR: Some NUMT intervals were not found in the mt_andNuc sequence dictionary.')
         new_intervals <- c(new_header, paste(interval_names, 1, lens, '+', interval_names, sep='\t'))
         writeLines(new_intervals, "~{d}{this_mt_intervals}")
-      EOF
+  EOF
 
       echo "Now shifting the noncontrol region..."
       java -jar /usr/gitc/picard.jar LiftOverIntervalList \
@@ -819,7 +818,7 @@ task MongoProduceSelfReference {
         out_intervals <- c(out_intervals, paste0(interval, collapse='\t'))
 
         writeLines(out_intervals, "~{d}{this_ctrl_interval}")
-      EOF
+  EOF
 
       echo "Now making force call variants..."
       python3.7 <<EOF
@@ -885,7 +884,7 @@ task MongoProduceSelfReference {
         mt_lifted_shifted_target = apply_conversion(mt_lifted_target, "target_self_shifted", skip_flip=True)
         check_vcf_integrity(mt_lifted_shifted_target)
         hl.export_vcf(mt_lifted_shifted_target, "~{d}{this_vcf_shifted_bgz}", tabix=True)
-    EOF
+  EOF
 
     python ~{JsonTools} \
     --path out_selfref/jsonout.json \
@@ -1970,7 +1969,7 @@ task ParallelMongoAlignToMtRegShiftedAndMetrics {
         df = read.table("~{d}{this_sample}_r2_wgs_metrics.txt",skip=6,header=TRUE,stringsAsFactors=FALSE,sep='\t',nrows=1)
         write.table(floor(df[,"MEAN_COVERAGE"]), "~{d}{this_sample}_r2_mean_coverage.txt", quote=F, col.names=F, row.names=F)
         write.table(df[,"MEDIAN_COVERAGE"], "~{d}{this_sample}_r2_median_coverage.txt", quote=F, col.names=F, row.names=F)
-      EOF
+  EOF
       {
         flock 200
         python ~{JsonTools} \
@@ -2005,7 +2004,7 @@ task ParallelMongoAlignToMtRegShiftedAndMetrics {
       this_max = ceil(max(file_of_interest['mean_coverage']))
       with open('this_max_r2.txt', 'w') as f:
         f.write(str(this_max))
-    EOF
+  EOF
   >>>
   runtime {
     # preemptible: select_first([preemptible_tries, 5])
@@ -2636,7 +2635,7 @@ task MongoLiftoverVCFAndGetCoverage {
         non_control_region = read.table("non_control_region.tsv", header=T)
         combined_table = rbind(beginning, non_control_region, end)
         write.table(combined_table, "~{d}{this_basename}.per_base_coverage.tsv", row.names=F, col.names=T, quote=F, sep="\t")
-      EOF
+  EOF
 
       echo "Now outputting a final table with integers..."
       paste -d "\t" "~{d}{this_basename}.round2liftover.all_int_outputs.txt" <(printf "n_liftover_changed_selfref_and_passed\n$(cat ~{d}{this_sample}_n_ref_pass_thru.txt)\n") <(printf "n_liftover_r1_pass\n$(cat ~{d}{this_sample}_n_pass.txt)\n") <(printf "n_liftover_r2_pass\n$(cat ~{d}{this_sample}_n_final_pass.txt)\n") > "~{d}{this_basename}.round2liftover.all_int_outputs.final.txt"
@@ -2889,7 +2888,7 @@ task MongoLiftoverSelfAndCollectOutputs {
         names(final_tsv) <- c('chrom', 'to_rm', 'pos', 'coverage')
         final_tsv[['target']] <- '.'
         write.table(final_tsv[,c('chrom','pos','target','coverage')], "~{d}{this_sample}.appended.liftedOver.tsv", row.names=F, sep='\t', quote=F)
-      EOF
+  EOF
 
       R --vanilla <<EOF
         dfLiftover = read.csv("~{d}{this_litover_stats}", sep='\t', stringsAsFactors=F)
@@ -2903,7 +2902,7 @@ task MongoLiftoverSelfAndCollectOutputs {
                         mtdna_consensus_overlaps = "~{d}{this_mt_overlap}",
                         nuc_consensus_overlaps = "~{d}{this_nuc_overlap}")
         write.table(cbind(dfLiftover, df), "~{d}{this_sample}_mtanalysis_diagnostic_statistics.tsv", row.names=F, sep='\t', quote=F)
-      EOF
+  EOF
 
       python ~{JsonTools} \
         --path out/jsonout.json \
