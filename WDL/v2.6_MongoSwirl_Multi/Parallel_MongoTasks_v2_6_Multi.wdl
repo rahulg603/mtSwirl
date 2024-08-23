@@ -214,7 +214,6 @@ task ParallelMongoProcessBamAndRevert {
         write.table(df, sep ="\t", row.names = F, file = "~{d}{this_sample}.flagstat.txt", quote = F)
   EOF
       
-      ls out
       gatk CollectQualityYieldMetrics \
       -I "~{d}{this_bam}" \
       ~{"-R " + ref_fasta} \
@@ -292,6 +291,7 @@ task ParallelMongoProcessBamAndRevert {
         SORT_ORDER="coordinate" \
         CREATE_INDEX=true \
         MAX_RECORDS_IN_RAM=300000
+      echo "Writing to out/jsonout.json..."
       {
         flock 200
         python ~{JsonTools} \
