@@ -203,6 +203,7 @@ task ParallelMongoProcessBamAndRevert {
       this_flagstat=~{d}(echo $this_flagstat | cut -d' ' -f$((idx+1)))
       this_sample_t=$(echo $this_sample | cut -d' ' -f$((idx+1)))
       this_sample="out/$this_sample_t"
+      echo "Starting processBAM ~{d}{this_sample_t} at $(date +"%Y-%m-%d %T.%3N")."
 
       R --vanilla <<EOF 
         vec <- readLines("~{d}{this_flagstat}")
@@ -313,7 +314,7 @@ task ParallelMongoProcessBamAndRevert {
         echo "Command failed with exit code $exit_code"
       fi
     }
-
+    
     export -f process_sample_and_revert
     # let's overwrite the n cpu by asking bash
     n_cpu=$(nproc)
