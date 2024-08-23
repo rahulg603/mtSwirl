@@ -291,7 +291,8 @@ task ParallelMongoProcessBamAndRevert {
         SORT_ORDER="coordinate" \
         CREATE_INDEX=true \
         MAX_RECORDS_IN_RAM=300000
-      echo "Writing to out/jsonout.json..."
+
+      echo "~{d}{this_sample_t}: completed gatk. Writing to json output."
       {
         flock 200
         python ~{JsonTools} \
@@ -305,13 +306,21 @@ task ParallelMongoProcessBamAndRevert {
           duplicate_metrics="~{d}{this_sample}.duplicate.metrics" \
           yield_metrics="~{d}{this_sample}.yield_metrics.txt"
       } 200>"out/lockfile.lock"
+
+      echo "~{d}{this_sample_t}: WRITTEN TO JSON."
+      exit_code=$?
+      if [ $exit_code -ne 0 ]; then
+        echo "Command failed with exit code $exit_code"
+      fi
     }
+
     export -f process_sample_and_revert
     # let's overwrite the n cpu by asking bash
     n_cpu=$(nproc)
+    echo "Processing bams across ~{d}{n_cpu} CPUs..."
     seq 0 $((~{length(subset_bam)}-1)) | xargs -n 1 -P ~{select_first([n_cpu, 1])} -I {} bash -c 'process_sample_and_revert "$@"' _ {}
 
-  # call loop then read and compute mean_coverage stat to return and output for next step. if that fails, this is the place
+    # call loop then read and compute mean_coverage stat to return and output for next step. if that fails, this is the place
     python <<EOF
       import json
       from math import ceil
