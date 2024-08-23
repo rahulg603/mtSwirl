@@ -235,6 +235,7 @@ task ParallelMongoProcessBamAndRevert {
         sed -e 's/ERROR::MATE_NOT_FOUND:Read name //g' | \
         sed -e 's/, Mate not found for paired read//g' > read_list.txt
       cat read_list.txt | wc -l | sed 's/^ *//g' > "~{d}{this_sample}.ct_failed.txt"
+
       if [[ $(tr -d "\r\n" < read_list.txt|wc -c) -eq 0 ]]; then
         cp "~{d}{this_bam}" rescued.bam
       else
@@ -286,6 +287,7 @@ task ParallelMongoProcessBamAndRevert {
         CLEAR_DT="false" \
         ADD_PG_TAG_TO_READS=false
 
+      echo "Now sorting md.bam for ~{d}{this_sample_t}"
       gatk --java-options "-Xmx~{command_mem}m" SortSam \
         INPUT=md.bam \
         OUTPUT="~{d}{this_sample}.proc.bam" \
@@ -314,7 +316,7 @@ task ParallelMongoProcessBamAndRevert {
         echo "Command failed with exit code $exit_code"
       fi
     }
-    
+
     export -f process_sample_and_revert
     # let's overwrite the n cpu by asking bash
     n_cpu=$(nproc)
