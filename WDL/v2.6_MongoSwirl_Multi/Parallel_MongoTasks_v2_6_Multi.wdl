@@ -254,7 +254,6 @@ task ParallelMongoProcessBamAndRevert {
         -ATTRIBUTE_TO_CLEAR CO \
         -SORT_ORDER queryname \
         -RESTORE_ORIGINAL_QUALITIES false ~{skip_hardclip_str}
-
       set -e
       echo "Now getting WGS metrics on the subsetted bam..."
       gatk --java-options "-Xmx~{command_mem}m" CollectWgsMetrics \
@@ -321,7 +320,9 @@ task ParallelMongoProcessBamAndRevert {
     # let's overwrite the n cpu by asking bash
     n_cpu_t=$(nproc)
     echo "Processing bams across ~{d}{n_cpu_t} CPUs..."
-    seq 0 $((~{length(subset_bam)}-1)) | xargs -n 1 -P ~{d}{n_cpu_t} -I {} bash -c 'process_sample_and_revert "$@"' _ {}
+    seq 0 $((~{length(subset_bam)}-1)) | xargs -n 1 -P 18 -I {} bash -c 'process_sample_and_revert "$@"' _ {}
+    # seq 0 $((~{length(subset_bam)}-1)) | xargs -n 1 -P ~{d}{n_cpu_t} -I {} bash -c 'process_sample_and_revert "$@"' _ {}
+
 
     echo "Finished processing BAMs, now producing output from json..."
     # call loop then read and compute mean_coverage stat to return and output for next step. if that fails, this is the place
@@ -334,6 +335,7 @@ task ParallelMongoProcessBamAndRevert {
   with open('this_max.txt', 'w') as f:
     f.write(str(this_max))
   EOF
+  !head out/5830894_23372_0_0.unmap.bam
   >>>
   runtime {
     # memory: machine_mem * 10 + " GB"
@@ -341,7 +343,7 @@ task ParallelMongoProcessBamAndRevert {
     docker: select_first([gatk_docker_override, "us.gcr.io/broad-gatk/gatk:"+gatk_version])
     # cpu: select_first([n_cpu, 1])
     #mem1_ssd1_v2_x2 works well but seems to be susceptible to spotinstance interruptions
-    dx_instance_type: "mem2_ssd1_v2_x16"
+    dx_instance_type: "mem1_ssd1_v2_x16"
   }
   output {
     Object obj_out = read_json("out/jsonout.json")
