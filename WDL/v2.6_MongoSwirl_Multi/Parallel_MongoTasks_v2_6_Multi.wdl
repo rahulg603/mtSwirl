@@ -343,7 +343,7 @@ task ParallelMongoProcessBamAndRevert {
     docker: select_first([gatk_docker_override, "us.gcr.io/broad-gatk/gatk:"+gatk_version])
     # cpu: select_first([n_cpu, 1])
     #mem1_ssd1_v2_x2 works well but seems to be susceptible to spotinstance interruptions
-    dx_instance_type: "mem1_ssd1_v2_x16"
+    dx_instance_type: "mem2_ssd1_v2_x16"
   }
   output {
     Object obj_out = read_json("out/jsonout.json")
