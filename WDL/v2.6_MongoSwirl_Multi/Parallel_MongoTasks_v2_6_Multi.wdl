@@ -320,19 +320,19 @@ task ParallelMongoProcessBamAndRevert {
     export -f process_sample_and_revert
     # let's overwrite the n cpu by asking bash
     n_cpu_t=$(nproc)
-    echo "Processing bams across ~{d}{n_cpu} CPUs..."
+    echo "Processing bams across ~{d}{n_cpu_t} CPUs..."
     seq 0 $((~{length(subset_bam)}-1)) | xargs -n 1 -P ~{d}{n_cpu_t} -I {} bash -c 'process_sample_and_revert "$@"' _ {}
 
     echo "Finished processing BAMs, now producing output from json..."
     # call loop then read and compute mean_coverage stat to return and output for next step. if that fails, this is the place
     python <<EOF
-    import json
-    from math import ceil
-    with open("out/jsonout.json", 'r') as json_file:    
-      file_of_interest = json.load(json_file)
-    this_max = ceil(max(file_of_interest['mean_coverage']))
-    with open('this_max.txt', 'w') as f:
-      f.write(str(this_max))
+  import json
+  from math import ceil
+  with open("out/jsonout.json", 'r') as json_file:    
+    file_of_interest = json.load(json_file)
+  this_max = ceil(max(file_of_interest['mean_coverage']))
+  with open('this_max.txt', 'w') as f:
+    f.write(str(this_max))
   EOF
   >>>
   runtime {
@@ -562,13 +562,13 @@ task MongoSubsetBamToChrMAndRevert {
     done
 
     python <<EOF
-    import json
-    from math import ceil
-    with open("out/jsonout.json", 'r') as json_file:    
-      file_of_interest = json.load(json_file)
-    this_max = ceil(max(file_of_interest['mean_coverage']))
-    with open('this_max.txt', 'w') as f:
-      f.write(str(this_max))
+  import json
+  from math import ceil
+  with open("out/jsonout.json", 'r') as json_file:    
+    file_of_interest = json.load(json_file)
+  this_max = ceil(max(file_of_interest['mean_coverage']))
+  with open('this_max.txt', 'w') as f:
+    f.write(str(this_max))
   EOF
   >>>
   runtime {
@@ -2010,13 +2010,13 @@ task ParallelMongoAlignToMtRegShiftedAndMetrics {
     seq 0 $((~{length(input_bam)}-1)) | xargs -n 1 -P ~{d}{n_cpu_t} -I {} bash -c 'align_to_mt_reg_shifted_metrics "$@"' _ {}
 
     python <<EOF
-    import json
-    from math import ceil
-    with open("out/jsonout.json", 'r') as json_file:    
-      file_of_interest = json.load(json_file)
-    this_max = ceil(max(file_of_interest['mean_coverage']))
-    with open('this_max_r2.txt', 'w') as f:
-      f.write(str(this_max))
+  import json
+  from math import ceil
+  with open("out/jsonout.json", 'r') as json_file:    
+    file_of_interest = json.load(json_file)
+  this_max = ceil(max(file_of_interest['mean_coverage']))
+  with open('this_max_r2.txt', 'w') as f:
+    f.write(str(this_max))
   EOF
   >>>
   runtime {
