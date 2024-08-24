@@ -335,7 +335,7 @@ task ParallelMongoProcessBamAndRevert {
   with open('this_max.txt', 'w') as f:
     f.write(str(this_max))
   EOF
-  !head out/5830894_23372_0_0.unmap.bam
+  head out/5830894_23372_0_0.unmap.bam
   >>>
   runtime {
     # memory: machine_mem * 10 + " GB"
