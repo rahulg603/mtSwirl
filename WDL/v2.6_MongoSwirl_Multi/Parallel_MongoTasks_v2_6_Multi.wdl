@@ -1109,15 +1109,18 @@ task MongoHC {
 
     export GATK_LOCAL_JAR=~{default="/root/gatk.jar" gatk_override}
 
-    mkdir out
+    touch out/lockfile.lock
 
-    sampleNames=('~{sep="' '" sample_name}')
-    bams=('~{sep="' '" input_bam}')
+    haplotype_caller_mt() {
+      local idx=$1
 
-    for i in "~{d}{!sampleNames[@]}"; do
+      local this_sample_t=~{sep="' '" sample_name}
+      local this_cram=~{sep="' '" input_bam}
 
-      this_cram="~{d}{bams[i]}"
-      this_sample=out/"~{d}{sampleNames[i]}"
+      this_sample_t=~{d}(echo $this_sample_t | cut -d' ' -f$((idx+1)))
+      
+      this_cram=~{d}(echo $this_cram | cut -d' ' -f$((idx+1)))
+      this_sample="out/$this_sample_t"
       this_basename="~{d}{this_sample}""~{suffix}"
       bamoutfile="~{d}{this_basename}.bamout.bam"
       touch "~{d}{bamoutfile}"
@@ -1139,10 +1142,10 @@ task MongoHC {
         -GQB 10 -GQB 20 -GQB 30 -GQB 40 -GQB 50 -GQB 60 -GQB 70 -GQB 80 -GQB 90 ~{d}{bamoutstr}
 
       echo "Now applying hard filters..."
-      gatk --java-options "-Xmx~{command_mem}m" SelectVariants -V "~{d}{this_basename}.raw.vcf" -select-type SNP -O snps.vcf
-      gatk --java-options "-Xmx~{command_mem}m" VariantFiltration -V snps.vcf \
+      gatk --java-options "-Xmx~{command_mem}m" SelectVariants -V "~{d}{this_basename}.raw.vcf" -select-type SNP -O "~{d}{this_sample}.snps.vcf"
+      gatk --java-options "-Xmx~{command_mem}m" VariantFiltration -V "~{d}{this_sample}.snps.vcf" \
         -R ~{ref_fasta} \
-        -O snps_filtered.vcf \
+        -O "~{d}{this_sample}.snps_filtered.vcf" \
         -filter "QD < 2.0" --filter-name "QD2" \
         -filter "QUAL < 30.0" --filter-name "QUAL30" \
         -filter "SOR > 3.0" --filter-name "SOR3" \
@@ -1154,10 +1157,10 @@ task MongoHC {
         --genotype-filter-expression "isHomRef == 1" --genotype-filter-name "isHomRefFilt" \
         ~{'--genotype-filter-expression "DP < ' + hc_dp_lower_bound + '" --genotype-filter-name "genoDP' + hc_dp_lower_bound + '"'}
 
-      gatk --java-options "-Xmx~{command_mem}m" SelectVariants -V "~{d}{this_basename}.raw.vcf" -select-type INDEL -O indels.vcf
-      gatk --java-options "-Xmx~{command_mem}m" VariantFiltration -V indels.vcf \
+      gatk --java-options "-Xmx~{command_mem}m" SelectVariants -V "~{d}{this_basename}.raw.vcf" -select-type INDEL -O "~{d}{this_sample}.indels.vcf"
+      gatk --java-options "-Xmx~{command_mem}m" VariantFiltration -V "~{d}{this_sample}.indels.vcf" \
         -R ~{ref_fasta} \
-        -O indels_filtered.vcf \
+        -O "~{d}{this_sample}.indels_filtered.vcf" \
         -filter "QD < 2.0" --filter-name "QD2" \
         -filter "QUAL < 30.0" --filter-name "QUAL30" \
         -filter "FS > 200.0" --filter-name "FS200" \
@@ -1167,7 +1170,7 @@ task MongoHC {
         --genotype-filter-expression "isHomRef == 1" --genotype-filter-name "isHomRefFilt" \
         ~{'--genotype-filter-expression "DP < ' + hc_dp_lower_bound + '" --genotype-filter-name "genoDP' + hc_dp_lower_bound + '"'}
 
-      gatk --java-options "-Xmx~{command_mem}m" MergeVcfs -I snps_filtered.vcf -I indels_filtered.vcf -O "~{d}{this_basename}.vcf"
+      gatk --java-options "-Xmx~{command_mem}m" MergeVcfs -I "~{d}{this_sample}.snps_filtered.vcf" -I "~{d}{this_sample}.indels_filtered.vcf" -O "~{d}{this_basename}.vcf"
 
       echo "Now filtering VCF..."
       gatk --java-options "-Xmx~{command_mem}m" SelectVariants \
@@ -1188,22 +1191,28 @@ task MongoHC {
         --dont-trim-alleles \
         --keep-original-ac \
         --create-output-variant-index
+      {
+        flock 200
+        python ~{JsonTools} \
+        --path out/jsonout.json \
+        --set-int post_filt_vars="$(cat ~{d}{this_basename}.passvars.txt)" \
+        --set samples="~{d}{this_sample_t}" \
+          raw_vcf="~{d}{this_basename}.raw.vcf" \
+          raw_vcf_idx="~{d}{this_basename}.raw.vcf.idx" \
+          output_bamOut="~{d}{bamoutfile}" \
+          filtered_vcf="~{d}{this_basename}.vcf" \
+          filtered_vcf_idx="~{d}{this_basename}.vcf.idx" \
+          full_pass_vcf="~{d}{this_basename}.pass.vcf" \
+          full_pass_vcf_index="~{d}{this_basename}.pass.vcf.idx" \
+          split_vcf="~{d}{this_basename}.pass.split.vcf" \
+          split_vcf_index="~{d}{this_basename}.pass.split.vcf.idx"
+      } 200>"out/lockfile.lock"
+    }
 
-      python ~{JsonTools} \
-      --path out/jsonout.json \
-      --set-int post_filt_vars="$(cat ~{d}{this_basename}.passvars.txt)" \
-      --set samples="~{d}{sampleNames[i]}" \
-        raw_vcf="~{d}{this_basename}.raw.vcf" \
-        raw_vcf_idx="~{d}{this_basename}.raw.vcf.idx" \
-        output_bamOut="~{d}{bamoutfile}" \
-        filtered_vcf="~{d}{this_basename}.vcf" \
-        filtered_vcf_idx="~{d}{this_basename}.vcf.idx" \
-        full_pass_vcf="~{d}{this_basename}.pass.vcf" \
-        full_pass_vcf_index="~{d}{this_basename}.pass.vcf.idx" \
-        split_vcf="~{d}{this_basename}.pass.split.vcf" \
-        split_vcf_index="~{d}{this_basename}.pass.split.vcf.idx"
-    
-    done
+    export -f haplotype_caller_mt
+    # let's overwrite the n cpu by asking bash
+    n_cp_t=$(nproc)
+    seq 0 $((~{length(sampleNames)}-1)) | xargs -n 1 -P 18 -I {} bash -c 'haplotype_caller_mt "$@"' _ {}
   >>>
 
   runtime {
@@ -1212,6 +1221,7 @@ task MongoHC {
     disks: "local-disk " + disk_size + " HDD"
     preemptible: select_first([preemptible_tries, 5])
     cpu: select_first([n_cpu,1])
+    dx_instance_type: "mem1_ssd1_x8"
   }
   output {
     Object obj_out = read_json("out/jsonout.json")
@@ -1830,6 +1840,7 @@ task ParallelMongoAlignToMtRegShiftedAndMetrics {
       # set the bash variable needed for the command-line
       /usr/gitc/bwa index "~{d}{this_mt_cat_fasta}"
       bash_ref_fasta="~{d}{this_mt_cat_fasta}"
+
       java -Xms3072m "-Xmx~{command_mem}m" -jar /usr/gitc/picard.jar \
         SamToFastq \
         INPUT="~{d}{this_bam}" \
@@ -1877,6 +1888,8 @@ task ParallelMongoAlignToMtRegShiftedAndMetrics {
         ASSUME_SORT_ORDER="queryname" \
         CLEAR_DT="false" \
         ADD_PG_TAG_TO_READS=false
+      echo "md BAM files:"
+      ls out/*.md.bam
 
       java -Xms3072m "-Xmx~{command_mem}m" -jar /usr/gitc/picard.jar \
         SortSam \
@@ -1885,7 +1898,8 @@ task ParallelMongoAlignToMtRegShiftedAndMetrics {
         SORT_ORDER="coordinate" \
         CREATE_INDEX=true \
         MAX_RECORDS_IN_RAM=300000
-
+      echo "md_filt BAM files:"
+      ls out/*.md.bam
       # now we have to subset to mito and update sequence dictionary
       java -Xms3072m "-Xmx~{command_mem}m" -jar /usr/gitc/picard.jar \
         ReorderSam \
