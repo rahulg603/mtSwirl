@@ -202,7 +202,7 @@ task ParallelMongoProcessBamAndRevert {
       this_bai=~{d}(echo $this_bai | cut -d' ' -f$((idx+1)))
       this_flagstat=~{d}(echo $this_flagstat | cut -d' ' -f$((idx+1)))
       this_sample_t=$(echo $this_sample | cut -d' ' -f$((idx+1)))
-      this_sample="out/$this_sample_t"
+      this_sample="out/~{d}{this_sample_t}"
       echo "Starting processBAM ~{d}{this_sample_t} at $(date +"%Y-%m-%d %T.%3N")."
 
       R --vanilla <<EOF 
@@ -226,27 +226,27 @@ task ParallelMongoProcessBamAndRevert {
       set +e
       gatk --java-options "-Xmx~{command_mem}m" ValidateSamFile \
         -INPUT "~{d}{this_bam}" \
-        -O output.txt \
+        -O "~{d}{this_sample_t}.output.txt" \
         -M VERBOSE \
         -IGNORE_WARNINGS true \
         -MAX_OUTPUT 9999999
-      cat output.txt | \
+      cat "~{d}{this_sample_t}.output.txt" | \
         grep 'ERROR.*Mate not found for paired read' | \
         sed -e 's/ERROR::MATE_NOT_FOUND:Read name //g' | \
-        sed -e 's/, Mate not found for paired read//g' > read_list.txt
-      cat read_list.txt | wc -l | sed 's/^ *//g' > "~{d}{this_sample}.ct_failed.txt"
+        sed -e 's/, Mate not found for paired read//g' > "~{d}{this_sample_t}.read_list.txt"
+      cat "~{d}{this_sample_t}.read_list.txt" | wc -l | sed 's/^ *//g' > "~{d}{this_sample}.ct_failed.txt"
 
-      if [[ $(tr -d "\r\n" < read_list.txt|wc -c) -eq 0 ]]; then
-        cp "~{d}{this_bam}" rescued.bam
+      if [[ $(tr -d "\r\n" < "~{d}{this_sample_t}.read_list.txt"|wc -c) -eq 0 ]]; then
+        cp "~{d}{this_bam}" "~{d}{this_sample_t}.rescued.bam"
       else
         gatk --java-options "-Xmx~{command_mem}m" FilterSamReads \
           -I "~{d}{this_bam}" \
-          -O rescued.bam \
-          -READ_LIST_FILE read_list.txt \
+          -O "~{d}{this_sample_t}.rescued.bam" \
+          -READ_LIST_FILE "~{d}{this_sample_t}.read_list.txt" \
           -FILTER excludeReadList
       fi
       gatk --java-options "-Xmx~{command_mem}m" RevertSam \
-        -INPUT rescued.bam \
+        -INPUT "~{d}{this_sample_t}.rescued.bam" \
         -OUTPUT_BY_READGROUP false \
         -OUTPUT "~{d}{this_sample}.unmap.bam" \
         -VALIDATION_STRINGENCY LENIENT \
@@ -273,7 +273,6 @@ task ParallelMongoProcessBamAndRevert {
         write.table(floor(df[,"MEAN_COVERAGE"]), "~{d}{this_sample}.mean_coverage.txt", quote=F, col.names=F, row.names=F)
         write.table(df[,"MEDIAN_COVERAGE"], "~{d}{this_sample}.median_coverage.txt", quote=F, col.names=F, row.names=F)
   EOF
-
       echo "Now preprocessing subsetted bam..."
       gatk --java-options "-Xmx~{command_mem}m" MarkDuplicates \
         INPUT="~{d}{this_bam}" \
@@ -478,15 +477,15 @@ task MongoSubsetBamToChrMAndRevert {
         cat output.txt | \
           grep 'ERROR.*Mate not found for paired read' | \
           sed -e 's/ERROR::MATE_NOT_FOUND:Read name //g' | \
-          sed -e 's/, Mate not found for paired read//g' > read_list.txt
-        cat read_list.txt | wc -l | sed 's/^ *//g' > "~{d}{this_sample}.ct_failed.txt"
-        if [[ $(tr -d "\r\n" < read_list.txt|wc -c) -eq 0 ]]; then
+          sed -e 's/, Mate not found for paired read//g' > "~{d}{this_sample_t}.read_list.txt"
+        cat "~{d}{this_sample_t}.read_list.txt" | wc -l | sed 's/^ *//g' > "~{d}{this_sample}.ct_failed.txt"
+        if [[ $(tr -d "\r\n" < "~{d}{this_sample_t}.read_list.txt"|wc -c) -eq 0 ]]; then
           cp "~{d}{this_sample}.bam" rescued.bam
         else
           gatk --java-options "-Xmx~{command_mem}m" FilterSamReads \
             -I "~{d}{this_sample}.bam" \
             -O rescued.bam \
-            -READ_LIST_FILE read_list.txt \
+            -READ_LIST_FILE "~{d}{this_sample_t}.read_list.txt" \
             -FILTER excludeReadList
         fi
 
@@ -1916,7 +1915,7 @@ task ParallelMongoAlignToMtRegShiftedAndMetrics {
         ATTRIBUTES_TO_REMOVE=MD \
         ALIGNED_BAM=/dev/stdin \
         UNMAPPED_BAM="~{d}{this_bam}" \
-        OUTPUT=mba.shifted.bam \
+        OUTPUT="~{d}{this_sample}.mba.shifted.bam" \
         REFERENCE_SEQUENCE="~{d}{this_mt_shifted_cat_fasta}" \
         PAIRED_RUN=true \
         SORT_ORDER="unsorted" \
@@ -1938,8 +1937,8 @@ task ParallelMongoAlignToMtRegShiftedAndMetrics {
 
       java -Xms3072m "-Xmx~{command_mem}m" -jar /usr/gitc/picard.jar \
         MarkDuplicates \
-        INPUT=mba.shifted.bam \
-        OUTPUT=md.shifted.bam \
+        INPUT="~{d}{this_sample}.mba.shifted.bam" \
+        OUTPUT="~{d}{this_sample}.md.shifted.bam" \
         METRICS_FILE="~{d}{this_output_bam_basename}.shifted.metrics" \
         VALIDATION_STRINGENCY=SILENT \
         ~{"READ_NAME_REGEX=" + read_name_regex} \
@@ -1950,7 +1949,7 @@ task ParallelMongoAlignToMtRegShiftedAndMetrics {
 
       java -Xms3072m "-Xmx~{command_mem}m" -jar /usr/gitc/picard.jar \
         SortSam \
-        INPUT=md.shifted.bam \
+        INPUT="~{d}{this_sample}.md.shifted.bam" \
         OUTPUT="~{d}{this_output_bam_basename}.shifted_pre_mt_filt.bam" \
         SORT_ORDER="coordinate" \
         CREATE_INDEX=true \
@@ -2019,6 +2018,8 @@ task ParallelMongoAlignToMtRegShiftedAndMetrics {
   with open('this_max_r2.txt', 'w') as f:
     f.write(str(this_max))
   EOF
+  echo "Finished processing all BAMs! Delocalizing..."
+  sleep 2
   >>>
   runtime {
     # preemptible: select_first([preemptible_tries, 5])
