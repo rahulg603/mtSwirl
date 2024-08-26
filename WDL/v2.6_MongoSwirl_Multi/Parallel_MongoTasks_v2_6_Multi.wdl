@@ -1212,7 +1212,7 @@ task MongoHC {
     export -f haplotype_caller_mt
     # let's overwrite the n cpu by asking bash
     n_cp_t=$(nproc)
-    seq 0 $((~{length(sampleNames)}-1)) | xargs -n 1 -P 18 -I {} bash -c 'haplotype_caller_mt "$@"' _ {}
+    seq 0 $((~{length(input_bam)}-1)) | xargs -n 1 -P 18 -I {} bash -c 'haplotype_caller_mt "$@"' _ {}
   >>>
 
   runtime {
