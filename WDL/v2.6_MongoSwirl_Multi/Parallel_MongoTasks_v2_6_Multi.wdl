@@ -1220,7 +1220,7 @@ task MongoHC {
     disks: "local-disk " + disk_size + " HDD"
     preemptible: select_first([preemptible_tries, 5])
     cpu: select_first([n_cpu,1])
-    dx_instance_type: "mem1_ssd1_x8"
+    dx_instance_type: "mem2_ssd1_v2_x8"
   }
   output {
     Object obj_out = read_json("out/jsonout.json")
