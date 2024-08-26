@@ -1108,9 +1108,8 @@ task MongoHC {
     set -e
 
     export GATK_LOCAL_JAR=~{default="/root/gatk.jar" gatk_override}
-
+    mkdir out
     touch out/lockfile.lock
-
     haplotype_caller_mt() {
       local idx=$1
 
