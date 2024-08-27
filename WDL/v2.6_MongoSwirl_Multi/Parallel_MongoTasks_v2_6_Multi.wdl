@@ -2109,7 +2109,7 @@ task MongoCallMtAndShifted {
 
   # Mem is in units of GB but our command and memory runtime values are in MB
   Int machine_mem = if defined(mem) then mem * 1000 else 3500
-  Int command_mem = machine_mem - 500
+  Int command_mem = 1024
 
   String d = "$" # a stupid trick to get ${} indexing in bash to work in Cromwell
 
@@ -2127,28 +2127,32 @@ task MongoCallMtAndShifted {
     echo "Extra arguments for mutect2: ""~{m2_extra_args}""$cust_interval"
 
     mkdir out
+    touch out/lockfile.lock
 
-    sampleNames=('~{sep="' '" sample_base_name}')
-    bams=('~{sep="' '" input_bam}')
-    intervals=('~{sep="' '" mt_interval_list}')
-    fastas=('~{sep="' '" mt_self}')
-    force_call_self=('~{sep="' '" force_call_vcf}')
-    shifted_bams=('~{sep="' '" shifted_input_bam}')
-    shifted_intervals=('~{sep="' '" shifted_mt_interval_list}')
-    shifted_fastas=('~{sep="' '" shifted_mt_self}')
-    shifted_force_call_self=('~{sep="' '" shifted_force_call_vcf}')
 
-    for i in "~{d}{!sampleNames[@]}"; do
+    call_mt_and_shifted() {
+      local idx=$1
+      sampleNames=('~{sep="' '" sample_base_name}')
+      bams=('~{sep="' '" input_bam}')
+      intervals=('~{sep="' '" mt_interval_list}')
+      fastas=('~{sep="' '" mt_self}')
+      force_call_self=('~{sep="' '" force_call_vcf}')
+      shifted_bams=('~{sep="' '" shifted_input_bam}')
+      shifted_intervals=('~{sep="' '" shifted_mt_interval_list}')
+      shifted_fastas=('~{sep="' '" shifted_mt_self}')
+      shifted_force_call_self=('~{sep="' '" shifted_force_call_vcf}')
 
-      this_sample=out/"~{d}{sampleNames[i]}~{suffix}"
-      this_bam="~{d}{bams[i]}"
-      this_noncontrol="~{d}{intervals[i]}"
-      this_force_vcf="~{d}{force_call_self[i]}"
-      this_self_fasta="~{d}{fastas[i]}"
-      this_shifted_bam="~{d}{shifted_bams[i]}"
-      this_control="~{d}{shifted_intervals[i]}"
-      this_shifted_force_vcf="~{d}{shifted_force_call_self[i]}"
-      this_self_shifted_fasta="~{d}{shifted_fastas[i]}"
+      this_sample_t=~{d}(echo $sampleNames | cut -d' ' -f$((idx+1)))
+      this_sample=out/"~{d}{this_sample_t}~{suffix}"
+
+      this_bam=~{d}(echo $bams | cut -d' ' -f$((idx+1)))
+      this_noncontrol=~{d}(echo $intervals | cut -d' ' -f$((idx+1)))
+      this_force_vcf=~{d}(echo $force_call_self | cut -d' ' -f$((idx+1)))
+      this_self_fasta=~{d}(echo $fastas | cut -d' ' -f$((idx+1)))
+      this_shifted_bam=~{d}(echo $shifted_bams | cut -d' ' -f$((idx+1)))
+      this_control=~{d}(echo $shifted_intervals | cut -d' ' -f$((idx+1)))
+      this_shifted_force_vcf=~{d}(echo $shifted_force_call_self | cut -d' ' -f$((idx+1)))
+      this_self_shifted_fasta=~{d}(echo $shifted_fastas | cut -d' ' -f$((idx+1)))
 
       touch "~{d}{this_sample}.bamout.bam"
       touch "~{d}{this_sample}.shifted.bamout.bam"
@@ -2210,7 +2214,12 @@ task MongoCallMtAndShifted {
           shifted_stats="~{d}{this_sample}.shifted.raw.vcf.stats" \
           shifted_output_bamOut="~{d}{this_sample}.shifted.bamout.bam"
 
-    done
+    }
+
+    export -f call_mt_and_shifted
+    n_cpu_t=$(nproc)
+    seq 0 $((~{length(input_bam)}-1)) | xargs -n 1 -P 18 -I {} bash -c 'call_mt_and_shifted "$@"' _ {}
+
 
   >>>
   runtime {
