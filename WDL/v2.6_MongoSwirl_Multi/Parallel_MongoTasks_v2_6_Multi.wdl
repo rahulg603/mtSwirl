@@ -1819,7 +1819,7 @@ task ParallelMongoAlignToMtRegShiftedAndMetrics {
 
       local this_sample_t=~{sep="' '" sample_base_name}
       local this_bam=~{sep="' '" input_bam}
-      local this_mt_interval=~{sep="' '" mt_interval_list}
+      local this_mt_intervals=~{sep="' '" mt_interval_list}
       local this_mt_cat_fasta=~{sep="' '" mt_cat}
       local this_mt_fasta=~{sep="' '" mt}
       local this_mt_shifted_cat_fasta=~{sep="' '" mt_shifted_cat}
@@ -1827,7 +1827,7 @@ task ParallelMongoAlignToMtRegShiftedAndMetrics {
 
       this_sample_t=~{d}(echo $this_sample_t | cut -d' ' -f$((idx+1)))
       this_bam=~{d}(echo $this_bam | cut -d' ' -f$((idx+1)))
-      this_mt_interval=~{d}(echo $this_mt_interval | cut -d' ' -f$((idx+1)))
+      this_mt_intervals=~{d}(echo $this_mt_intervals | cut -d' ' -f$((idx+1)))
       this_mt_cat_fasta=~{d}(echo $this_mt_cat_fasta | cut -d' ' -f$((idx+1)))
       this_mt_fasta=~{d}(echo $this_mt_fasta | cut -d' ' -f$((idx+1)))
       this_mt_shifted_cat_fasta=~{d}(echo $this_mt_shifted_cat_fasta | cut -d' ' -f$((idx+1)))
@@ -1978,7 +1978,6 @@ task ParallelMongoAlignToMtRegShiftedAndMetrics {
         CREATE_INDEX=true
 
       echo "Now collecting wgs metrics..."
-      echo "The mt intervals: ~{d}{this_mt_intervals}"
       java -Xms3072m "-Xmx~{command_mem}m" -jar /usr/gitc/picard.jar \
         CollectWgsMetrics \
         INPUT="~{d}{this_output_bam_basename}.bam" \
