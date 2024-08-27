@@ -1876,7 +1876,7 @@ task ParallelMongoAlignToMtRegShiftedAndMetrics {
         UNMAP_CONTAMINANT_READS=true \
         ADD_PG_TAG_TO_READS=false
 
-      java -Xms33072m "-Xmx~{command_mem}m" -jar /usr/gitc/picard.jar \
+      java -Xms3072m "-Xmx~{command_mem}m" -jar /usr/gitc/picard.jar \
         MarkDuplicates \
         INPUT="~{d}{this_sample}.mba.bam" \
         OUTPUT="~{d}{this_sample}.md.bam" \
