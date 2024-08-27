@@ -2129,7 +2129,6 @@ task MongoCallMtAndShifted {
     mkdir out
     touch out/lockfile.lock
 
-
     call_mt_and_shifted() {
       local idx=$1
       sampleNames=('~{sep="' '" sample_base_name}')
@@ -2202,6 +2201,8 @@ task MongoCallMtAndShifted {
         --max-reads-per-alignment-start ~{max_reads_per_alignment_start} \
         --max-mnp-distance 0 ~{d}{shiftedbamoutstr}
 
+      {
+        flock 200
         python ~{JsonTools} \
         --path out/jsonout.json \
         --set samples="~{d}{sampleNames[i]}" \
@@ -2213,14 +2214,12 @@ task MongoCallMtAndShifted {
           shifted_raw_vcf_idx="~{d}{this_sample}.shifted.raw.vcf.idx" \
           shifted_stats="~{d}{this_sample}.shifted.raw.vcf.stats" \
           shifted_output_bamOut="~{d}{this_sample}.shifted.bamout.bam"
-
+      } 200>"out/lockfile.lock"
     }
 
     export -f call_mt_and_shifted
     n_cpu_t=$(nproc)
     seq 0 $((~{length(input_bam)}-1)) | xargs -n 1 -P 18 -I {} bash -c 'call_mt_and_shifted "$@"' _ {}
-
-
   >>>
   runtime {
       docker: select_first([gatk_docker_override, "us.gcr.io/broad-gatk/gatk:"+gatk_version])
