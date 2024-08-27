@@ -1898,7 +1898,7 @@ task ParallelMongoAlignToMtRegShiftedAndMetrics {
         CREATE_INDEX=true \
         MAX_RECORDS_IN_RAM=300000
       echo "md_filt BAM files:"
-      ls out/*.md.bam
+      ls out/*_pre_mt_filt.bam
       # now we have to subset to mito and update sequence dictionary
       java -Xms3072m "-Xmx~{command_mem}m" -jar /usr/gitc/picard.jar \
         ReorderSam \
@@ -1978,6 +1978,7 @@ task ParallelMongoAlignToMtRegShiftedAndMetrics {
         CREATE_INDEX=true
 
       echo "Now collecting wgs metrics..."
+      echo "The mt intervals: ~{d}{this_mt_intervals}"
       java -Xms3072m "-Xmx~{command_mem}m" -jar /usr/gitc/picard.jar \
         CollectWgsMetrics \
         INPUT="~{d}{this_output_bam_basename}.bam" \
