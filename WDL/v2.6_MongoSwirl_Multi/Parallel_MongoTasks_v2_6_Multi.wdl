@@ -1834,6 +1834,13 @@ task ParallelMongoAlignToMtRegShiftedAndMetrics {
       this_mt_shifted_fasta=~{d}(echo $this_mt_shifted_fasta | cut -d' ' -f$((idx+1)))
 
       local this_sample="out/$this_sample_t"
+
+      local this_sample_fastq="$(this_sample).fastq"
+      local this_sample_fastq_shifted="$(this_sample).shifted.fastq"
+
+      local this_sample_bam_shifted="$(this_sample).aligned.bam"
+      local this_sample_bam_aligned_shifted="$(this_sample).shifted.aligned.bam"
+
       local this_output_bam_basename=out/"$(basename ~{d}{this_bam} .bam).remap~{suffix}"
       
       # set the bash variable needed for the command-line
@@ -1843,13 +1850,13 @@ task ParallelMongoAlignToMtRegShiftedAndMetrics {
       java -Xms3072m "-Xmx~{command_mem}m" -jar /usr/gitc/picard.jar \
         SamToFastq \
         INPUT="~{d}{this_bam}" \
-        FASTQ="~{d}{this_sample}.fastq" \
+        FASTQ="~{d}{this_sample_fastq}" \
         INTERLEAVE=true \
         NON_PF=true
 
-      echo "output fastq file: ~{d}{sample_name}.fastq"
+      echo "tmp files: ~{d}{this_sample_fastq}   ~{d}{this_sample_fastq_shifted}    ~{d}{this_sample_bam_shifted}    ~{d}{this_sample_bam_aligned_shifted}"
       touch "~{d}{sample_name}.aligned.bam"
-      /usr/gitc/~{this_bwa_commandline} "~{d}{sample_name}.fastq" - 2> >(tee "~{d}{this_output_bam_basename}.bwa.stderr.log" >&2) > "~{d}{sample_name}.aligned.bam"
+      /usr/gitc/~{this_bwa_commandline} "~{d}{this_sample_fastq}" - 2> >(tee "~{d}{this_output_bam_basename}.bwa.stderr.log" >&2) > "~{d}{this_sample_bam_shifted}"
       ls out/*.aligned.bam
       java -Xms3072m "-Xmx~{command_mem}m" -jar /usr/gitc/picard.jar \
         MergeBamAlignment \
@@ -1919,11 +1926,11 @@ task ParallelMongoAlignToMtRegShiftedAndMetrics {
       java -Xms3072m "-Xmx~{command_mem}m" -jar /usr/gitc/picard.jar \
         SamToFastq \
         INPUT="~{d}{this_bam}" \
-        FASTQ="~{d}{this_sample}.shifted.fastq" \
+        FASTQ="~{d}{this_sample_fastq_shifted}" \
         INTERLEAVE=true \
         NON_PF=true
 
-      /usr/gitc/~{this_bwa_commandline} ~{d}{sample_name}.shifted.fastq - 2> >(tee "~{d}{this_output_bam_basename}.bwa.stderr.log" >&2) > ~{d}{sample_name}.aligned.shifted.bam
+      /usr/gitc/~{this_bwa_commandline} "~{d}{this_sample_fastq_shifted}" - 2> >(tee "~{d}{this_output_bam_basename}.bwa.stderr.log" >&2) > "~{d}{this_sample_bam_aligned_shifted}"
 
       java -Xms3072m "-Xmx~{command_mem}m" -jar /usr/gitc/picard.jar \
         MergeBamAlignment \
@@ -1932,7 +1939,7 @@ task ParallelMongoAlignToMtRegShiftedAndMetrics {
         ATTRIBUTES_TO_RETAIN=X0 \
         ATTRIBUTES_TO_REMOVE=NM \
         ATTRIBUTES_TO_REMOVE=MD \
-        ALIGNED_BAM="~{d}{this_sample}.aligned.shifted.bam" \
+        ALIGNED_BAM="~{d}{this_sample_bam_aligned_shifted}" \
         UNMAPPED_BAM="~{d}{this_bam}" \
         OUTPUT="~{d}{this_sample}.mba.shifted.bam" \
         REFERENCE_SEQUENCE="~{d}{this_mt_shifted_cat_fasta}" \
