@@ -1843,10 +1843,10 @@ task ParallelMongoAlignToMtRegShiftedAndMetrics {
       java -Xms3072m "-Xmx~{command_mem}m" -jar /usr/gitc/picard.jar \
         SamToFastq \
         INPUT="~{d}{this_bam}" \
-        FASTQ="~{this_sample}.fastq" \
+        FASTQ="~{d}{this_sample}.fastq" \
         INTERLEAVE=true \
         NON_PF=true | \
-      /usr/gitc/~{this_bwa_commandline} "~{this_sample}.fastq" - 2> >(tee "~{d}{this_output_bam_basename}.bwa.stderr.log" >&2) | \
+      /usr/gitc/~{this_bwa_commandline} "~{d}{this_sample}.fastq" - 2> >(tee "~{d}{this_output_bam_basename}.bwa.stderr.log" >&2) | \
       java -Xms3072m "-Xmx~{command_mem}m" -jar /usr/gitc/picard.jar \
         MergeBamAlignment \
         VALIDATION_STRINGENCY=SILENT \
@@ -1854,7 +1854,7 @@ task ParallelMongoAlignToMtRegShiftedAndMetrics {
         ATTRIBUTES_TO_RETAIN=X0 \
         ATTRIBUTES_TO_REMOVE=NM \
         ATTRIBUTES_TO_REMOVE=MD \
-        ALIGNED_BAM="~{this_sample}.fastq" \
+        ALIGNED_BAM="~{d}{this_sample}.fastq" \
         UNMAPPED_BAM="~{d}{this_bam}" \
         OUTPUT="~{d}{this_sample}.mba.bam" \
         REFERENCE_SEQUENCE="~{d}{this_mt_cat_fasta}" \
@@ -1915,10 +1915,10 @@ task ParallelMongoAlignToMtRegShiftedAndMetrics {
       java -Xms3072m "-Xmx~{command_mem}m" -jar /usr/gitc/picard.jar \
         SamToFastq \
         INPUT="~{d}{this_bam}" \
-        FASTQ="~{this_sample}.fastq" \
+        FASTQ="~{d}{this_sample}.fastq" \
         INTERLEAVE=true \
         NON_PF=true | \
-      /usr/gitc/~{this_bwa_commandline} "~{this_sample}.fastq" - 2> >(tee "~{d}{this_output_bam_basename}.shifted.bwa.stderr.log" >&2) | \
+      /usr/gitc/~{this_bwa_commandline} "~{d}{this_sample}.fastq" - 2> >(tee "~{d}{this_output_bam_basename}.shifted.bwa.stderr.log" >&2) | \
       java -Xms3072m "-Xmx~{command_mem}m" -jar /usr/gitc/picard.jar \
         MergeBamAlignment \
         VALIDATION_STRINGENCY=SILENT \
