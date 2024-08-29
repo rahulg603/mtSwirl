@@ -1926,7 +1926,7 @@ task ParallelMongoAlignToMtRegShiftedAndMetrics {
         ATTRIBUTES_TO_RETAIN=X0 \
         ATTRIBUTES_TO_REMOVE=NM \
         ATTRIBUTES_TO_REMOVE=MD \
-        ALIGNED_BAM="~{this_sample}.fastq" \
+        ALIGNED_BAM="~{d}{this_sample}.fastq" \
         UNMAPPED_BAM="~{d}{this_bam}" \
         OUTPUT="~{d}{this_sample}.mba.shifted.bam" \
         REFERENCE_SEQUENCE="~{d}{this_mt_shifted_cat_fasta}" \
