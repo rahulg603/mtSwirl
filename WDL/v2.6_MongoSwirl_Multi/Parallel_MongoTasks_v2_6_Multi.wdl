@@ -1834,7 +1834,7 @@ task ParallelMongoAlignToMtRegShiftedAndMetrics {
       this_mt_shifted_fasta=~{d}(echo $this_mt_shifted_fasta | cut -d' ' -f$((idx+1)))
 
       local this_sample="out/$this_sample_t"
-      this_output_bam_basename=out/"$(basename ~{d}{this_bam} .bam).remap~{suffix}"
+      local this_output_bam_basename=out/"$(basename ~{d}{this_bam} .bam).remap~{suffix}"
       
       # set the bash variable needed for the command-line
       /usr/gitc/bwa index "~{d}{this_mt_cat_fasta}"
