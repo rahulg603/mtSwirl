@@ -108,7 +108,7 @@ workflow ParallelAlignAndCallR2 {
 
   Int M2_mem = if AlignToMtRegShiftedAndMetrics.max_mean_coverage > 25000 then 14 else 7
 
-  call MongoTasks_Multi.MongoCallMtAndShifted as CallMtAndShifted {
+  call MongoTasks_Multi.ParallelMongoCallMtAndShifted as CallMtAndShifted {
     input:
       sample_base_name = AlignToMtRegShiftedAndMetrics.samples,
       suffix = suffix,

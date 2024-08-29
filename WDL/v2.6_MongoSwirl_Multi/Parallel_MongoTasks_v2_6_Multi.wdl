@@ -2063,7 +2063,7 @@ task ParallelMongoAlignToMtRegShiftedAndMetrics {
   }
 }
 
-task MongoCallMtAndShifted {
+task ParallelMongoCallMtAndShifted {
   input {
     Array[String] sample_base_name
     File selfref_bundle
@@ -2131,27 +2131,27 @@ task MongoCallMtAndShifted {
 
     call_mt_and_shifted() {
       local idx=$1
-      sampleNames=('~{sep="' '" sample_base_name}')
-      bams=('~{sep="' '" input_bam}')
-      intervals=('~{sep="' '" mt_interval_list}')
-      fastas=('~{sep="' '" mt_self}')
-      force_call_self=('~{sep="' '" force_call_vcf}')
-      shifted_bams=('~{sep="' '" shifted_input_bam}')
-      shifted_intervals=('~{sep="' '" shifted_mt_interval_list}')
-      shifted_fastas=('~{sep="' '" shifted_mt_self}')
-      shifted_force_call_self=('~{sep="' '" shifted_force_call_vcf}')
+      local sampleNames=(~{sep="' '" sample_base_name})
+      local bams=(~{sep="' '" input_bam})
+      local intervals=(~{sep="' '" mt_interval_list})
+      local fastas=(~{sep="' '" mt_self})
+      local force_call_self=(~{sep="' '" force_call_vcf})
+      local shifted_bams=(~{sep="' '" shifted_input_bam})
+      local shifted_intervals=(~{sep="' '" shifted_mt_interval_list})
+      local shifted_fastas=(~{sep="' '" shifted_mt_self})
+      local shifted_force_call_self=(~{sep="' '" shifted_force_call_vcf})
 
-      this_sample_t=~{d}(echo $sampleNames | cut -d' ' -f$((idx+1)))
-      this_sample=out/"~{d}{this_sample_t}~{suffix}"
+      local this_sample_t=~{d}(echo $sampleNames | cut -d' ' -f$((idx+1)))
+      local this_sample=out/"~{d}{this_sample_t}~{suffix}"
 
-      this_bam=~{d}(echo $bams | cut -d' ' -f$((idx+1)))
-      this_noncontrol=~{d}(echo $intervals | cut -d' ' -f$((idx+1)))
-      this_force_vcf=~{d}(echo $force_call_self | cut -d' ' -f$((idx+1)))
-      this_self_fasta=~{d}(echo $fastas | cut -d' ' -f$((idx+1)))
-      this_shifted_bam=~{d}(echo $shifted_bams | cut -d' ' -f$((idx+1)))
-      this_control=~{d}(echo $shifted_intervals | cut -d' ' -f$((idx+1)))
-      this_shifted_force_vcf=~{d}(echo $shifted_force_call_self | cut -d' ' -f$((idx+1)))
-      this_self_shifted_fasta=~{d}(echo $shifted_fastas | cut -d' ' -f$((idx+1)))
+      local this_bam=~{d}(echo $bams | cut -d' ' -f$((idx+1)))
+      local this_noncontrol=~{d}(echo $intervals | cut -d' ' -f$((idx+1)))
+      local this_force_vcf=~{d}(echo $force_call_self | cut -d' ' -f$((idx+1)))
+      local this_self_fasta=~{d}(echo $fastas | cut -d' ' -f$((idx+1)))
+      local this_shifted_bam=~{d}(echo $shifted_bams | cut -d' ' -f$((idx+1)))
+      local this_control=~{d}(echo $shifted_intervals | cut -d' ' -f$((idx+1)))
+      local this_shifted_force_vcf=~{d}(echo $shifted_force_call_self | cut -d' ' -f$((idx+1)))
+      local this_self_shifted_fasta=~{d}(echo $shifted_fastas | cut -d' ' -f$((idx+1)))
 
       touch "~{d}{this_sample}.bamout.bam"
       touch "~{d}{this_sample}.shifted.bamout.bam"
@@ -2205,7 +2205,7 @@ task MongoCallMtAndShifted {
         flock 200
         python ~{JsonTools} \
         --path out/jsonout.json \
-        --set samples="~{d}{sampleNames[i]}" \
+        --set samples="~{d}{this_sample_t}" \
           raw_vcf="~{d}{this_sample}.raw.vcf" \
           raw_vcf_idx="~{d}{this_sample}.raw.vcf.idx" \
           stats="~{d}{this_sample}.raw.vcf.stats" \
