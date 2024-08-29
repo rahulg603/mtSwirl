@@ -1833,13 +1833,13 @@ task ParallelMongoAlignToMtRegShiftedAndMetrics {
       this_mt_shifted_cat_fasta=~{d}(echo $this_mt_shifted_cat_fasta | cut -d' ' -f$((idx+1)))
       this_mt_shifted_fasta=~{d}(echo $this_mt_shifted_fasta | cut -d' ' -f$((idx+1)))
 
-      local this_sample="out/$this_sample_t"
+      local this_sample=out/"~{d}{this_sample_t}"
 
-      local this_sample_fastq="$(this_sample).fastq"
-      local this_sample_fastq_shifted="$(this_sample).shifted.fastq"
+      local this_sample_fastq="~{d}{this_sample}".fastq
+      local this_sample_fastq_shifted="~{d}{this_sample}".shifted.fastq
 
-      local this_sample_bam_shifted="$(this_sample).aligned.bam"
-      local this_sample_bam_aligned_shifted="$(this_sample).shifted.aligned.bam"
+      local this_sample_bam_shifted="~{d}{this_sample}".aligned.bam
+      local this_sample_bam_aligned_shifted="~{d}{this_sample}".shifted.aligned.bam
 
       local this_output_bam_basename=out/"$(basename ~{d}{this_bam} .bam).remap~{suffix}"
       
