@@ -1833,7 +1833,7 @@ task ParallelMongoAlignToMtRegShiftedAndMetrics {
       this_mt_shifted_cat_fasta=~{d}(echo $this_mt_shifted_cat_fasta | cut -d' ' -f$((idx+1)))
       this_mt_shifted_fasta=~{d}(echo $this_mt_shifted_fasta | cut -d' ' -f$((idx+1)))
 
-      this_sample="out/$this_sample_t"
+      local this_sample="out/$this_sample_t"
       this_output_bam_basename=out/"$(basename ~{d}{this_bam} .bam).remap~{suffix}"
       
       # set the bash variable needed for the command-line
