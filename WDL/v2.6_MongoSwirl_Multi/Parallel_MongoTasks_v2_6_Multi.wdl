@@ -2128,35 +2128,34 @@ task ParallelMongoCallMtAndShifted {
 
     mkdir out
     touch out/lockfile.lock
-
     call_mt_and_shifted() {
+      sampleNames=('~{sep="' '" sample_base_name}')
+      bams=('~{sep="' '" input_bam}')
+      intervals=('~{sep="' '" mt_interval_list}')
+      fastas=('~{sep="' '" mt_self}')
+      force_call_self=('~{sep="' '" force_call_vcf}')
+      shifted_bams=('~{sep="' '" shifted_input_bam}')
+      shifted_intervals=('~{sep="' '" shifted_mt_interval_list}')
+      shifted_fastas=('~{sep="' '" shifted_mt_self}')
+      shifted_force_call_self=('~{sep="' '" shifted_force_call_vcf}')
+
       local idx=$1
-      local sampleNames=(~{sep="' '" sample_base_name})
-      local bams=(~{sep="' '" input_bam})
-      local intervals=(~{sep="' '" mt_interval_list})
-      local fastas=(~{sep="' '" mt_self})
-      local force_call_self=(~{sep="' '" force_call_vcf})
-      local shifted_bams=(~{sep="' '" shifted_input_bam})
-      local shifted_intervals=(~{sep="' '" shifted_mt_interval_list})
-      local shifted_fastas=(~{sep="' '" shifted_mt_self})
-      local shifted_force_call_self=(~{sep="' '" shifted_force_call_vcf})
+      this_sample_t=$(echo $sampleNames | cut -d' ' -f$((idx+1)))
+      this_sample=out/"${this_sample_t}~{suffix}"
 
-      local this_sample_t=~{d}(echo $sampleNames | cut -d' ' -f$((idx+1)))
-      local this_sample=out/"~{d}{this_sample_t}~{suffix}"
+      this_bam=$(echo $bams | cut -d' ' -f$((idx+1)))
+      this_noncontrol=$(echo $intervals | cut -d' ' -f$((idx+1)))
+      this_force_vcf=$(echo $force_call_self | cut -d' ' -f$((idx+1)))
+      this_self_fasta=$(echo $fastas | cut -d' ' -f$((idx+1)))
+      this_shifted_bam=$(echo $shifted_bams | cut -d' ' -f$((idx+1)))
+      this_control=$(echo $shifted_intervals | cut -d' ' -f$((idx+1)))
+      this_shifted_force_vcf=$(echo $shifted_force_call_self | cut -d' ' -f$((idx+1)))
+      this_self_shifted_fasta=$(echo $shifted_fastas | cut -d' ' -f$((idx+1)))
 
-      local this_bam=~{d}(echo $bams | cut -d' ' -f$((idx+1)))
-      local this_noncontrol=~{d}(echo $intervals | cut -d' ' -f$((idx+1)))
-      local this_force_vcf=~{d}(echo $force_call_self | cut -d' ' -f$((idx+1)))
-      local this_self_fasta=~{d}(echo $fastas | cut -d' ' -f$((idx+1)))
-      local this_shifted_bam=~{d}(echo $shifted_bams | cut -d' ' -f$((idx+1)))
-      local this_control=~{d}(echo $shifted_intervals | cut -d' ' -f$((idx+1)))
-      local this_shifted_force_vcf=~{d}(echo $shifted_force_call_self | cut -d' ' -f$((idx+1)))
-      local this_self_shifted_fasta=~{d}(echo $shifted_fastas | cut -d' ' -f$((idx+1)))
+      touch "${this_sample}.bamout.bam"
+      touch "${this_sample}.shifted.bamout.bam"
 
-      touch "~{d}{this_sample}.bamout.bam"
-      touch "~{d}{this_sample}.shifted.bamout.bam"
-
-      samtools index "~{d}{this_shifted_bam}"
+      samtools index "${this_shifted_bam}"
 
       if [[ ~{make_bamout} == 'true' ]]; then bamoutstr="--bam-output ~{d}{this_sample}.bamout.bam"; else bamoutstr=""; fi
       if [[ ~{make_bamout} == 'true' ]]; then shiftedbamoutstr="--bam-output ~{d}{this_sample}.shifted.bamout.bam"; else shiftedbamoutstr=""; fi
@@ -2200,7 +2199,6 @@ task ParallelMongoCallMtAndShifted {
         --read-filter MateUnmappedAndUnmappedReadFilter \
         --max-reads-per-alignment-start ~{max_reads_per_alignment_start} \
         --max-mnp-distance 0 ~{d}{shiftedbamoutstr}
-
       {
         flock 200
         python ~{JsonTools} \
@@ -2218,8 +2216,8 @@ task ParallelMongoCallMtAndShifted {
     }
 
     export -f call_mt_and_shifted
-    n_cpu_t=$(nproc)
-    seq 0 $((~{length(input_bam)}-1)) | xargs -n 1 -P 18 -I {} bash -c 'call_mt_and_shifted "$@"' _ {}
+    # n_cpu_t=$(nproc)
+    seq 0 $((~{length(sample_base_name)}-1)) | xargs -n 1 -P 18 -I {} bash -c 'call_mt_and_shifted "$@"' _ {}
   >>>
   runtime {
       docker: select_first([gatk_docker_override, "us.gcr.io/broad-gatk/gatk:"+gatk_version])
@@ -2304,7 +2302,7 @@ task MongoLiftoverCombineMergeFilterContamSplit {
     export GATK_LOCAL_JAR=~{default="/root/gatk.jar" gatk_override}
 
     if [[ ~{defined(verifyBamID)} == 'true' ]]; then
-      arr_verifybam_contamination=('~{sep="' '" select_first([verifyBamID,def2])}')
+      arr_verifybam_contamination=(~{sep="' '" select_first([verifyBamID,def2])})
     else
       arr_verifybam_contamination=($(printf '0.0 %.0s' {1..~{length(sample_base_name)}} | xargs))
     fi
