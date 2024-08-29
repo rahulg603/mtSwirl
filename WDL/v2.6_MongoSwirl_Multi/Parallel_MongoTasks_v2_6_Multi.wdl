@@ -1848,7 +1848,7 @@ task ParallelMongoAlignToMtRegShiftedAndMetrics {
         NON_PF=true
       ls out/*fastq
       touch "~{d}{sample_name}.aligned.bam"
-      /usr/gitc/~{this_bwa_commandline} ~{sample_name}.fastq - 2> >(tee "~{d}{this_output_bam_basename}.bwa.stderr.log" >&2) > ~{sample_name}.aligned.bam
+      /usr/gitc/~{this_bwa_commandline} ~{d}{sample_name}.fastq - 2> >(tee "~{d}{this_output_bam_basename}.bwa.stderr.log" >&2) > ~{d}{sample_name}.aligned.bam
       ls out/*.aligned.bam
       java -Xms3072m "-Xmx~{command_mem}m" -jar /usr/gitc/picard.jar \
         MergeBamAlignment \
