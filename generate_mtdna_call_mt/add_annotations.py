@@ -5,7 +5,7 @@ import logging
 import re
 import sys
 
-import sys
+import sys, os
 sys.path.append('/home/jupyter/')
 
 from collections import Counter
@@ -28,7 +28,13 @@ from gnomad_mitochondria.pipeline.annotation_descriptions import (
 # gnomad_qc: https://github.com/broadinstitute/gnomad_qc
 
 # Include NA in POPS to account for cases where population annotations are missing
+POPS = POPS["v3"]["genomes"]
 POPS.append("NA")
+
+#hl.init(tmp_dir="file:///tmp")
+#hl.init(tmp_dir=f"{os.environ['WORKSPACE_BUCKET']}/tmp",
+#        local_tmpdir="file:///tmp",
+#        spark_conf={"spark.local.dir": "file:///tmp"})
 
 RESOURCE_PATH = 'gcp-public-data--gnomad/resources/mitochondria'
 RESOURCES = {
@@ -62,6 +68,7 @@ if int(hl.version().split('-')[0].split('.')[2]) >= 75: # only use this if using
 
 def add_genotype(mt_path: str, min_hom_threshold: float = 0.95) -> hl.MatrixTable:
     """
+    STABLE
     Add in genotype annotation based on heteroplasmy level.
 
     If the heteroplasmy level is above the min_hom_threshold, set the genotype to 1/1.
@@ -91,6 +98,7 @@ def add_genotype(mt_path: str, min_hom_threshold: float = 0.95) -> hl.MatrixTabl
 
 def add_variant_context(input_mt: hl.MatrixTable) -> hl.MatrixTable:
     """
+    STABLE
     Add variant context annotations to the MatrixTable.
 
     This fucntion adds in information on regions/strand for SNPs that can be useful for determining mutational signatures.
@@ -163,6 +171,7 @@ def add_gnomad_metadata(input_mt: hl.MatrixTable) -> hl.MatrixTable:
 
 def add_age_and_pop(input_mt: hl.MatrixTable, participant_data: str) -> hl.MatrixTable:
     """
+    STABLE
     Add sample-level metadata for age and pop to `input_mt`.
 
     :param input_mt: MatrixTable
@@ -341,6 +350,7 @@ def add_terra_metadata(
     input_mt: hl.MatrixTable, participant_data: str
 ) -> hl.MatrixTable:
     """
+    STABLE
     Add Terra metadata to the MatrixTable.
 
     The participant_data file can be obtained by downloading the participant data after running Mutect2 in Terra. This file should contain the following columns:
@@ -395,6 +405,7 @@ def add_terra_metadata(
 
 def add_hap_defining(input_mt: hl.MatrixTable) -> hl.MatrixTable:
     """
+    STABLE
     Add bool on whether or not a variant is a haplogroup-defining variant to the MatrixTable.
 
     Haplogroup-defining annotations were obtained from PhyloTree Build 17.
@@ -418,23 +429,47 @@ def add_hap_defining(input_mt: hl.MatrixTable) -> hl.MatrixTable:
     return input_mt
 
 
-def add_trna_predictions(input_mt: hl.MatrixTable) -> hl.MatrixTable:
+def add_trna_predictions(input_mt: hl.MatrixTable, avoid_fasta_workaround: bool) -> hl.MatrixTable:
     """
+    STABLE
     Add tRNA predictions on pathogenicity from PON-mt-tRNA and MitoTIP to the MatrixTable.
 
     :param input_mt: MatrixTable
+    :param avoid_fasta_workaround: bool
     :return: MatrixTable with tRNA predictions of pathogenicity added
     """
     # Add PON-mt-tRNA predictions
     pon_predictions = hl.import_table(RESOURCES["pon_mt_trna"])
 
     # If reference allele from fasta doesn't match Reference_nucleotide, PON-mt-tRNA is reporting the allele of opposite strand and need to get reverse complement for ref and alt
-    add_reference_sequence(hl.get_reference("GRCh37"))
-    pon_predictions = pon_predictions.annotate(
-        ref=hl.get_sequence(
-            "MT", hl.int(pon_predictions.mtDNA_position), reference_genome="GRCh37"
+
+    if not avoid_fasta_workaround:
+        # as a workaround for some hail weirdness, we are going to manually grab the GRCh37 sequence
+        tab_workaround = hl.import_table(RESOURCES['variant_context'])
+        tab_workaround = tab_workaround.select(pos = hl.int(tab_workaround.MT_POS), 
+                                               REF = tab_workaround["POS.REF.ALT"].split('\.')[1])
+        tab_workaround = tab_workaround.key_by('pos','REF').distinct()
+        tab_workaround = tab_workaround.key_by('pos')
+        pon_predictions = pon_predictions.annotate(
+            ref=tab_workaround[hl.int(pon_predictions.mtDNA_position)].REF
         )
-    )
+
+        # confirm that the workaround produces the correct results
+        #add_reference_sequence(hl.get_reference("GRCh37"))
+        #tab_workaround = tab_workaround.annotate(REF_corr = hl.get_sequence('MT', tab_workaround.pos, reference_genome='GRCh37'))
+        #tab_workaround.filter(tab_workaround.REF_corr != tab_workaround.REF).count() # > 0
+    else:
+        add_reference_sequence(hl.get_reference("GRCh37"))
+        pon_predictions = pon_predictions.annotate(
+            ref=hl.get_sequence(
+                "MT", hl.int(pon_predictions.mtDNA_position), reference_genome='GRCh37'
+            )
+        )
+
+    n_miss_ref = pon_predictions.filter(~hl.is_defined(pon_predictions.ref)).count()
+    if n_miss_ref != 0:
+        raise ValueError('ERROR: pon predictions table has undefined reference sequences.')
+    
     pon_predictions = pon_predictions.annotate(
         alt=hl.if_else(
             pon_predictions.Reference_nucleotide == pon_predictions.ref,
@@ -515,6 +550,7 @@ def generate_expressions(
     input_mt: hl.MatrixTable, min_hom_threshold: float = 0.95
 ) -> hl.MatrixTable:
     """
+    STABLE
     Create expressions to use for annotating the MatrixTable.
 
     The expressions include AC, AN, AF, filtering allele frequency (FAF) split by homplasmic/heteroplasmic, haplgroup, and population.
@@ -618,6 +654,7 @@ def standardize_haps(
     input_mt: hl.MatrixTable, annotation: str, haplogroup_order: list
 ) -> list:
     """
+    STABLE
     Convert the dictionary of haplogroup annotations into an array of values in a predefined haplogroup order.
 
     :param input_mt: MatrixTable
@@ -635,6 +672,7 @@ def standardize_pops(
     input_mt: hl.MatrixTable, annotation: str, population_order: list
 ) -> list:
     """
+    STABLE
     Convert the dictionary of population annotations into an array of values in a predefined population order.
 
     :param input_mt: MatrixTable
@@ -650,6 +688,7 @@ def standardize_pops(
 
 def add_quality_histograms(input_mt: hl.MatrixTable) -> hl.MatrixTable:
     """
+    STABLE
     Add histogram annotations for quality metrics to the MatrixTable.
 
     :param input_mt: MatrixTable
@@ -865,6 +904,7 @@ def remove_low_allele_frac_genotypes(
     input_mt: hl.MatrixTable, vaf_filter_threshold: float = 0.01
 ) -> hl.MatrixTable:
     """
+    STABLE
     Remove low_allele_frac genotypes and sets the call to homoplasmic reference.
 
     NOTE: vaf_filter_threshold should match what was supplied to the vaf_filter_threshold when running Mutect2, variants below this value will be set to homoplasmic reference after calculating the common_low_heteroplasmy filter, Mutect2 will have flagged these variants as "low_allele_frac"
@@ -906,6 +946,7 @@ def remove_low_allele_frac_genotypes(
 
 def apply_indel_stack_filter(input_mt: hl.MatrixTable) -> hl.MatrixTable:
     """
+    STABLE
     Apply the indel_stack filter to the MatrixTable.
 
     The indel_stack filter marks alleles where all samples with the variant call had at least 2 different indels called at the position
@@ -1006,6 +1047,7 @@ def generate_filter_histogram(
     input_mt: hl.MatrixTable, filter_name: str
 ) -> hl.ArrayExpression:
     """
+    STABLE
     Generate histogram for number of indiviudals with the specified sample-level filter at different heteroplasmy levels.
 
     :param input_mt: MatrixTable
@@ -1125,6 +1167,7 @@ def add_sample_annotations(
     input_mt: hl.MatrixTable, min_hom_threshold: float = 0.95
 ) -> hl.MatrixTable:
     """
+    STABLE
     Add sample annotations to the MatrixTable.
 
     These sample annotations include the callrate, number of heteroplasmic/homoplasmic SNPs/indels, and the number of singletons.
@@ -1193,6 +1236,7 @@ def add_sample_annotations(
 
 def add_vep(input_mt: hl.MatrixTable, run_vep: bool, vep_output: str) -> hl.MatrixTable:
     """
+    STABLE
     Add vep annotations to the MatrixTable.
 
     :param input_mt: MatrixTable
@@ -1253,6 +1297,7 @@ def add_vep(input_mt: hl.MatrixTable, run_vep: bool, vep_output: str) -> hl.Matr
 
 def add_rsids(input_mt: hl.MatrixTable, band_aid_fix: bool) -> hl.MatrixTable:
     """
+    STABLE
     Add rsid annotations to the MatrixTable.
 
     :param input_mt: MatrixTable
@@ -2049,6 +2094,7 @@ def main(args):  # noqa: D103
     keep_all_samples = args.keep_all_samples
     run_vep = args.run_vep
     max_cn = args.max_cn
+    avoid_fasta_workaround = args.avoid_fasta_workaround
 
     logger.info("Cutoff for homoplasmic variants is set to %.2f...", min_hom_threshold)
 
@@ -2114,7 +2160,7 @@ def main(args):  # noqa: D103
         mt = add_hap_defining(mt)
 
         logger.info("Annotating tRNA predictions...")
-        mt = add_trna_predictions(mt)
+        mt = add_trna_predictions(mt, avoid_fasta_workaround)
 
         # If 'subset-to-gnomad-release' is set, 'age' and 'pop' are added by the add_gnomad_metadata function.
         # If 'subset-to-gnomad-release' is not set, the user should include an 'age' and 'pop' column in the file supplied to `participant-data`.
@@ -2135,6 +2181,10 @@ def main(args):  # noqa: D103
             # Subset to release samples and filter out rows that no longer have at least one alt call
             mt = mt.filter_cols(mt.release)  # Filter to cols where release is true
             mt = mt.filter_rows(hl.agg.any(mt.HL > 0))
+
+        mt = mt.checkpoint(
+            f"{output_dir}/prior_to_sample_filt.mt", overwrite=args.overwrite
+        )
 
         logger.info('Removing samples which show overlapping homoplasmies in self-reference construction...')
         mt, n_removed_overlap = filter_by_hom_overlap(
@@ -2360,6 +2410,10 @@ if __name__ == "__main__":
     parser.add_argument(
         '--debug-allow-intermediate-read', action='store_true', help='If true, will read intermediates from disk. If found, assumes stats have been exported.'
     )
+    parser.add_argument('--avoid-fasta-workaround',
+                        action='store_true',
+                        help='If True, will NOT use a workaround for loading in the GRCh37 FASTA sequence. The workaround involves avoiding hail for sequence data and instead using the all sites variant context file.' + \
+                             'We have verified that this file has the correct reference sequence. This workaround does not change the tRNA annotations.')
     parser.add_argument(
         '--sample-stats', required=True, help='Path to sample statistics file. Used to remove samples that show overlapping mtDNA homoplasmies.'
     )
