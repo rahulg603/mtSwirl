@@ -101,8 +101,8 @@ task ParallelMongoSubsetBam {
             flock 200
               python ~{JsonTools} \
               --path out/jsonout.json \
-              --set samples="~{d}{this_sample_t}" \
               --set-int idx="~{d}idx" \
+              --set samples="~{d}{this_sample_t}" \
                 subset_bam="~{d}{this_sample}.bam" \
                 subset_bai="~{d}{this_sample}.bai" \
                 idxstats_metrics="~{d}{this_sample}.stats.tsv" \
@@ -2256,8 +2256,8 @@ task ParallelMongoCallMtAndShifted {
         flock 200
         python ~{JsonTools} \
         --path out/jsonout.json \
-        --set samples="~{d}{this_sample_t}" \
         --set-int idx="~{d}idx" \
+        --set samples="~{d}{this_sample_t}" \
           raw_vcf="~{d}{this_sample}.raw.vcf" \
           raw_vcf_idx="~{d}{this_sample}.raw.vcf.idx" \
           stats="~{d}{this_sample}.raw.vcf.stats" \
