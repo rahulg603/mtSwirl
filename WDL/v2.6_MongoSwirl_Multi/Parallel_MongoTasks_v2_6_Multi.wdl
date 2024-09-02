@@ -123,11 +123,11 @@ task ParallelMongoSubsetBam {
     seq 0 $((~{length(input_bam)}-1)) | xargs -n 1 -P 18 -I {} bash -c 'process_sample "$@"' _ {}
     python <<EOF
   import json
-  with open('jsonout.json', 'r') as json_file:
+  with open('out/jsonout.json', 'r') as json_file:
     data = json.load(json_file)
   idx = data['idx']
   reordered_data = {key: [value for _, value in sorted(zip(idx, data[key]))] for key in data.keys()}
-  with open('jsonout.json', 'w') as json_file:
+  with open('out/jsonout.json', 'w') as json_file:
     json.dump(reordered_data, json_file, indent=4)
   EOF
   
@@ -311,7 +311,7 @@ task ParallelMongoProcessBamAndRevert {
         --path out/jsonout.json \
         --set-int reads_dropped="$(cat ~{d}{this_sample}.ct_failed.txt)" \
                   idx="~{d}idx" \
-          mean_coverage="$(cat ~{d}{this_sample}.mean_coverage.txt)" \
+                  mean_coverage="$(cat ~{d}{this_sample}.mean_coverage.txt)" \
         --set samples="~{d}{this_sample_t}" \
           output_bam="~{d}{this_sample}.proc.bam" \
           output_bai="~{d}{this_sample}.proc.bai" \
@@ -341,11 +341,11 @@ task ParallelMongoProcessBamAndRevert {
   import json
   from math import ceil
 
-  with open('jsonout.json', 'r') as json_file:
+  with open('out/jsonout.json', 'r') as json_file:
     data = json.load(json_file)
   idx = data['idx']
   reordered_data = {key: [value for _, value in sorted(zip(idx, data[key]))] for key in data.keys()}
-  with open('jsonout.json', 'w') as json_file:
+  with open('out/jsonout.json', 'w') as json_file:
     json.dump(reordered_data, json_file, indent=4)
   with open("out/jsonout.json", 'r') as json_file:    
     file_of_interest = json.load(json_file)
@@ -1235,11 +1235,11 @@ task MongoHC {
 
     python <<EOF
   import json
-  with open('jsonout.json', 'r') as json_file:
+  with open('out/jsonout.json', 'r') as json_file:
     data = json.load(json_file)
   idx = data['idx']
   reordered_data = {key: [value for _, value in sorted(zip(idx, data[key]))] for key in data.keys()}
-  with open('jsonout.json', 'w') as json_file:
+  with open('out/jsonout.json', 'w') as json_file:
     json.dump(reordered_data, json_file, indent=4)
   EOF
   >>>
@@ -2070,11 +2070,11 @@ task ParallelMongoAlignToMtRegShiftedAndMetrics {
   import json
   from math import ceil
 
-  with open('jsonout.json', 'r') as json_file:
+  with open('out/jsonout.json', 'r') as json_file:
     data = json.load(json_file)
   idx = data['idx']
   reordered_data = {key: [value for _, value in sorted(zip(idx, data[key]))] for key in data.keys()}
-  with open('jsonout.json', 'w') as json_file:
+  with open('out/jsonout.json', 'w') as json_file:
     json.dump(reordered_data, json_file, indent=4)
 
   with open("out/jsonout.json", 'r') as json_file:    
@@ -2276,11 +2276,11 @@ task ParallelMongoCallMtAndShifted {
 
     python <<EOF
   import json
-  with open('jsonout.json', 'r') as json_file:
+  with open('out/jsonout.json', 'r') as json_file:
     data = json.load(json_file)
   idx = data['idx']
   reordered_data = {key: [value for _, value in sorted(zip(idx, data[key]))] for key in data.keys()}
-  with open('jsonout.json', 'w') as json_file:
+  with open('out/jsonout.json', 'w') as json_file:
     json.dump(reordered_data, json_file, indent=4)
   EOF
   >>>
