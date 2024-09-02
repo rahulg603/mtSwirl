@@ -99,13 +99,14 @@ task ParallelMongoSubsetBam {
         echo "~{d}{this_sample_t}: completed gatk. Writing to json output."
           {
             flock 200
-            python ~{JsonTools} \
-            --path out/jsonout.json \
-            --set samples="~{d}{this_sample_t}" \
-              subset_bam="~{d}{this_sample}.bam" \
-              subset_bai="~{d}{this_sample}.bai" \
-              idxstats_metrics="~{d}{this_sample}.stats.tsv" \
-              flagstat_pre_metrics="~{d}{this_sample}.flagstat.pre.txt"
+              python ~{JsonTools} \
+              --path out/jsonout.json \
+              --set samples="~{d}{this_sample_t}" \
+              --set-int idx="~{d}idx" \
+                subset_bam="~{d}{this_sample}.bam" \
+                subset_bai="~{d}{this_sample}.bai" \
+                idxstats_metrics="~{d}{this_sample}.stats.tsv" \
+                flagstat_pre_metrics="~{d}{this_sample}.flagstat.pre.txt"
           } 200>"out/lockfile.lock"
       elif [ $thisexit -eq 1 ] && [ $SAMERRFAIL -eq 1 ]; then
         echo "Samtools exited with status ${thisexit} and ${SAMERR}."
@@ -120,6 +121,16 @@ task ParallelMongoSubsetBam {
     # let's overwrite the n cpu by asking bash
     n_cpu_t=$(nproc)
     seq 0 $((~{length(input_bam)}-1)) | xargs -n 1 -P 18 -I {} bash -c 'process_sample "$@"' _ {}
+    python <<EOF
+  import json
+  with open('jsonout.json', 'r') as json_file:
+    data = json.load(json_file)
+  idx = data['idx']
+  reordered_data = {key: [value for _, value in sorted(zip(idx, data[key]))] for key in data.keys()}
+  with open('jsonout.json', 'w') as json_file:
+    json.dump(reordered_data, json_file, indent=4)
+  EOF
+  
   >>>
   runtime {
     # memory: machine_mem + " GB"
@@ -299,6 +310,7 @@ task ParallelMongoProcessBamAndRevert {
         python ~{JsonTools} \
         --path out/jsonout.json \
         --set-int reads_dropped="$(cat ~{d}{this_sample}.ct_failed.txt)" \
+                  idx="~{d}idx" \
           mean_coverage="$(cat ~{d}{this_sample}.mean_coverage.txt)" \
         --set samples="~{d}{this_sample_t}" \
           output_bam="~{d}{this_sample}.proc.bam" \
@@ -328,6 +340,13 @@ task ParallelMongoProcessBamAndRevert {
     python <<EOF
   import json
   from math import ceil
+
+  with open('jsonout.json', 'r') as json_file:
+    data = json.load(json_file)
+  idx = data['idx']
+  reordered_data = {key: [value for _, value in sorted(zip(idx, data[key]))] for key in data.keys()}
+  with open('jsonout.json', 'w') as json_file:
+    json.dump(reordered_data, json_file, indent=4)
   with open("out/jsonout.json", 'r') as json_file:    
     file_of_interest = json.load(json_file)
   this_max = ceil(max(file_of_interest['mean_coverage']))
@@ -1195,6 +1214,7 @@ task MongoHC {
         python ~{JsonTools} \
         --path out/jsonout.json \
         --set-int post_filt_vars="$(cat ~{d}{this_basename}.passvars.txt)" \
+                  idx="~{d}idx" \
         --set samples="~{d}{this_sample_t}" \
           raw_vcf="~{d}{this_basename}.raw.vcf" \
           raw_vcf_idx="~{d}{this_basename}.raw.vcf.idx" \
@@ -1212,6 +1232,16 @@ task MongoHC {
     # let's overwrite the n cpu by asking bash
     n_cp_t=$(nproc)
     seq 0 $((~{length(input_bam)}-1)) | xargs -n 1 -P 18 -I {} bash -c 'haplotype_caller_mt "$@"' _ {}
+
+    python <<EOF
+  import json
+  with open('jsonout.json', 'r') as json_file:
+    data = json.load(json_file)
+  idx = data['idx']
+  reordered_data = {key: [value for _, value in sorted(zip(idx, data[key]))] for key in data.keys()}
+  with open('jsonout.json', 'w') as json_file:
+    json.dump(reordered_data, json_file, indent=4)
+  EOF
   >>>
 
   runtime {
@@ -2014,6 +2044,7 @@ task ParallelMongoAlignToMtRegShiftedAndMetrics {
         python ~{JsonTools} \
         --path out/jsonout.json \
         --set-int mean_coverage="$(cat ~{d}{this_sample}_r2_mean_coverage.txt)" \
+                  idx="~{d}idx" \
         --set-float median_coverage="$(cat ~{d}{this_sample}_r2_median_coverage.txt)" \
         --set samples="~{d}{this_sample_t}" \
           mt_aligned_bam="~{d}{this_output_bam_basename}.bam" \
@@ -2038,6 +2069,14 @@ task ParallelMongoAlignToMtRegShiftedAndMetrics {
     python <<EOF
   import json
   from math import ceil
+
+  with open('jsonout.json', 'r') as json_file:
+    data = json.load(json_file)
+  idx = data['idx']
+  reordered_data = {key: [value for _, value in sorted(zip(idx, data[key]))] for key in data.keys()}
+  with open('jsonout.json', 'w') as json_file:
+    json.dump(reordered_data, json_file, indent=4)
+
   with open("out/jsonout.json", 'r') as json_file:    
     file_of_interest = json.load(json_file)
   this_max = ceil(max(file_of_interest['mean_coverage']))
@@ -2218,6 +2257,7 @@ task ParallelMongoCallMtAndShifted {
         python ~{JsonTools} \
         --path out/jsonout.json \
         --set samples="~{d}{this_sample_t}" \
+        --set-int idx="~{d}idx" \
           raw_vcf="~{d}{this_sample}.raw.vcf" \
           raw_vcf_idx="~{d}{this_sample}.raw.vcf.idx" \
           stats="~{d}{this_sample}.raw.vcf.stats" \
@@ -2233,6 +2273,16 @@ task ParallelMongoCallMtAndShifted {
     # n_cpu_t=$(nproc)
     echo "len of input bam: $((~{length(input_bam)}-1))"
     seq 0 $((~{length(input_bam)}-1)) | xargs -n 1 -P 18 -I {} bash -c 'call_mt_and_shifted "$@"' _ {}
+
+    python <<EOF
+  import json
+  with open('jsonout.json', 'r') as json_file:
+    data = json.load(json_file)
+  idx = data['idx']
+  reordered_data = {key: [value for _, value in sorted(zip(idx, data[key]))] for key in data.keys()}
+  with open('jsonout.json', 'w') as json_file:
+    json.dump(reordered_data, json_file, indent=4)
+  EOF
   >>>
   runtime {
       docker: select_first([gatk_docker_override, "us.gcr.io/broad-gatk/gatk:"+gatk_version])
