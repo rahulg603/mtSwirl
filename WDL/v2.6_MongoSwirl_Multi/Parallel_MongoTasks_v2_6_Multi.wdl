@@ -58,16 +58,18 @@ task ParallelMongoSubsetBam {
     mkdir out
     touch out/lockfile.lock
 
+    bam=('~{sep="' '" input_bam}')
+    bai=('~{sep="' '" input_bai}')
+    sample=('~{sep="' '" sample_name}')
+
     process_sample() {
       local idx=$1
-      local this_bam=~{sep="' '" input_bam}
-      local this_bai=~{sep="' '" input_bai}
-      local this_sample=~{sep="' '" sample_name}
 
-      this_bam=~{d}(echo $this_bam | cut -d' ' -f$((idx+1)))
-      this_bai=~{d}(echo $this_bai | cut -d' ' -f$((idx+1)))
-      this_sample_t=$(echo $this_sample | cut -d' ' -f$((idx+1)))
-      this_sample="out/$this_sample_t"
+      local this_bam="~{d}{bam[idx]}"
+      local this_bai="~{d}{bai[idx]}"
+      local this_sample_t="~{d}{sample[idx]}"
+      
+      local this_sample="out/~{d}{this_sample_t}"
 
       ~{if force_manual_download then "gsutil " + requester_pays_prefix + " cp $this_bam bamfile_$idx.cram" else ""}
       ~{if force_manual_download then "gsutil " + requester_pays_prefix + " cp $this_bai bamfile_$idx.cram.crai" else ""}
@@ -75,15 +77,15 @@ task ParallelMongoSubsetBam {
       ~{if force_manual_download then "this_bai=bamfile_$idx.cram.crai" else ""}
 
       set +e
-      SAMERR=$(/usr/bin/samtools-1.9/samtools idxstats "$this_bam" --threads ~{nthreads} 2>&1 > "${this_sample}.stats.tsv")
+      SAMERR=$(/usr/bin/samtools-1.9/samtools idxstats "~{d}{this_bam}" --threads ~{nthreads} 2>&1 > "~{d}{this_sample}.stats.tsv")
       thisexit=$?
       set -e
 
       SAMERRFAIL=$(echo $SAMERR | grep 'samtools idxstats: failed to process \".*.cram\"$' | wc -l | sed 's/^ *//g')
-      echo "${this_sample}: samtools exited with status ${thisexit}. Match status was ${SAMERRFAIL}."
+      echo "~{d}{this_sample}: samtools exited with status ~{d}{thisexit}. Match status was ~{d}{SAMERRFAIL}."
 
       if [ $thisexit -eq 0 ] && [ $SAMERRFAIL -eq 0 ]; then
-        /usr/bin/samtools-1.9/samtools flagstat "$this_bam" --threads ~{nthreads} > "${this_sample}.flagstat.pre.txt"
+        /usr/bin/samtools-1.9/samtools flagstat "~{d}{this_bam}" --threads ~{nthreads} > "~{d}{this_sample}.flagstat.pre.txt"
 
         gatk --java-options "-Xmx~{command_mem}m" PrintReads \
           ~{"-R " + ref_fasta} \
@@ -101,7 +103,7 @@ task ParallelMongoSubsetBam {
             flock 200
               python ~{JsonTools} \
               --path out/jsonout.json \
-              --set-int idx="~{d}idx" \
+              --set-int idx="~{d}{idx}" \
               --set samples="~{d}{this_sample_t}" \
                 subset_bam="~{d}{this_sample}.bam" \
                 subset_bai="~{d}{this_sample}.bai" \
@@ -202,18 +204,21 @@ task ParallelMongoProcessBamAndRevert {
 
     mkdir out
     touch out/lockfile.lock
+
+    bam=('~{sep="' '" subset_bam}')
+    bai=('~{sep="' '" subset_bai}')
+    sample=('~{sep="' '" sample_name}')
+    flagstat=('~{sep="' '" flagstat_pre_metrics}')
     process_sample_and_revert() {
       local idx=$1
-      local this_bam=~{sep="' '" subset_bam}
-      local this_bai=~{sep="' '" subset_bai}
-      local this_sample=~{sep="' '" sample_name}
-      local this_flagstat=~{sep="' '" flagstat_pre_metrics}
 
-      this_bam=~{d}(echo $this_bam | cut -d' ' -f$((idx+1)))
-      this_bai=~{d}(echo $this_bai | cut -d' ' -f$((idx+1)))
-      this_flagstat=~{d}(echo $this_flagstat | cut -d' ' -f$((idx+1)))
-      this_sample_t=$(echo $this_sample | cut -d' ' -f$((idx+1)))
-      this_sample="out/~{d}{this_sample_t}"
+      local this_bam="~{d}{bam[idx]}"
+      local this_bai="~{d}{bai[idx]}"
+      local this_flagstat="~{d}{flagstat[idx]}"
+      local this_sample_t="~{d}{sample[idx]}"
+
+      local this_sample="out/~{d}{this_sample_t}"
+
       echo "Starting processBAM ~{d}{this_sample_t} at $(date +"%Y-%m-%d %T.%3N")."
 
       R --vanilla <<EOF 
@@ -310,7 +315,7 @@ task ParallelMongoProcessBamAndRevert {
         python ~{JsonTools} \
         --path out/jsonout.json \
         --set-int reads_dropped="$(cat ~{d}{this_sample}.ct_failed.txt)" \
-                  idx="~{d}idx" \
+                  idx="~{d}{idx}" \
                   mean_coverage="$(cat ~{d}{this_sample}.mean_coverage.txt)" \
         --set samples="~{d}{this_sample_t}" \
           output_bam="~{d}{this_sample}.proc.bam" \
@@ -1129,16 +1134,16 @@ task MongoHC {
     export GATK_LOCAL_JAR=~{default="/root/gatk.jar" gatk_override}
     mkdir out
     touch out/lockfile.lock
+
+    sample=('~{sep="' '" sample_name}')
+    cram=('~{sep="' '" input_bam}')
     haplotype_caller_mt() {
       local idx=$1
 
-      local this_sample_t=~{sep="' '" sample_name}
-      local this_cram=~{sep="' '" input_bam}
-
-      this_sample_t=~{d}(echo $this_sample_t | cut -d' ' -f$((idx+1)))
+      local this_sample_t="{d}{sample[idx]}"
+      local this_cram="{d}{cram[idx]}"
       
-      this_cram=~{d}(echo $this_cram | cut -d' ' -f$((idx+1)))
-      this_sample="out/$this_sample_t"
+      this_sample="out/~{d}{this_sample_t}"
       this_basename="~{d}{this_sample}""~{suffix}"
       bamoutfile="~{d}{this_basename}.bamout.bam"
       touch "~{d}{bamoutfile}"
@@ -1214,7 +1219,7 @@ task MongoHC {
         python ~{JsonTools} \
         --path out/jsonout.json \
         --set-int post_filt_vars="$(cat ~{d}{this_basename}.passvars.txt)" \
-                  idx="~{d}idx" \
+                  idx="~{d}{idx}" \
         --set samples="~{d}{this_sample_t}" \
           raw_vcf="~{d}{this_basename}.raw.vcf" \
           raw_vcf_idx="~{d}{this_basename}.raw.vcf.idx" \
@@ -1844,34 +1849,34 @@ task ParallelMongoAlignToMtRegShiftedAndMetrics {
     mkdir out
     touch out/lockfile.lock
 
+    sample=('~{sep="' '" sample_base_name}')
+    bam=('~{sep="' '" input_bam}')
+    mt_intervals=('~{sep="' '" mt_interval_list}')
+    mt_cat_fasta=('~{sep="' '" mt_cat}')
+    mt_fasta=('~{sep="' '" mt}')
+    mt_shifted_cat_fasta=('~{sep="' '" mt_shifted_cat}')
+    mt_shifted_fasta=('~{sep="' '" mt_shifted}')
+
     align_to_mt_reg_shifted_metrics() {
       local idx=$1
 
-      local this_sample_t=~{sep="' '" sample_base_name}
-      local this_bam=~{sep="' '" input_bam}
-      local this_mt_intervals=~{sep="' '" mt_interval_list}
-      local this_mt_cat_fasta=~{sep="' '" mt_cat}
-      local this_mt_fasta=~{sep="' '" mt}
-      local this_mt_shifted_cat_fasta=~{sep="' '" mt_shifted_cat}
-      local this_mt_shifted_fasta=~{sep="' '" mt_shifted}
-
-      this_sample_t=~{d}(echo $this_sample_t | cut -d' ' -f$((idx+1)))
-      this_bam=~{d}(echo $this_bam | cut -d' ' -f$((idx+1)))
-      this_mt_intervals=~{d}(echo $this_mt_intervals | cut -d' ' -f$((idx+1)))
-      this_mt_cat_fasta=~{d}(echo $this_mt_cat_fasta | cut -d' ' -f$((idx+1)))
-      this_mt_fasta=~{d}(echo $this_mt_fasta | cut -d' ' -f$((idx+1)))
-      this_mt_shifted_cat_fasta=~{d}(echo $this_mt_shifted_cat_fasta | cut -d' ' -f$((idx+1)))
-      this_mt_shifted_fasta=~{d}(echo $this_mt_shifted_fasta | cut -d' ' -f$((idx+1)))
+      this_sample_t="~{d}{sample[idx]}"
+      this_bam="~{d}{bam[idx]}"
+      this_mt_intervals="~{d}{mt_intervals[idx]}"
+      this_mt_cat_fasta="~{d}{mt_cat_fasta[idx]}"
+      this_mt_fasta="~{d}{mt_fasta[idx]}"
+      this_mt_shifted_cat_fasta="~{d}{mt_shifted_cat_fasta[idx]}"
+      this_mt_shifted_fasta="~{d}{mt_shifted_fasta[idx]}"
 
       local this_sample=out/"~{d}{this_sample_t}"
 
       local this_sample_fastq="~{d}{this_sample}".fastq
       local this_sample_fastq_shifted="~{d}{this_sample}".shifted.fastq
 
-      local this_sample_bam_shifted="~{d}{this_sample}".aligned.bam
+      local this_sample_bam_aligned="~{d}{this_sample}".aligned.bam
       local this_sample_bam_aligned_shifted="~{d}{this_sample}".shifted.aligned.bam
 
-      local this_output_bam_basename=out/"$(basename ~{d}{this_bam} .bam).remap~{suffix}"
+      local this_output_bam_basename=out/"~{d}(basename ~{d}{this_bam} .bam).remap~{suffix}"
       
       # set the bash variable needed for the command-line
       /usr/gitc/bwa index "~{d}{this_mt_cat_fasta}"
@@ -1884,9 +1889,9 @@ task ParallelMongoAlignToMtRegShiftedAndMetrics {
         INTERLEAVE=true \
         NON_PF=true
 
-      echo "tmp files: ~{d}{this_sample_fastq}   ~{d}{this_sample_fastq_shifted}    ~{d}{this_sample_bam_shifted}    ~{d}{this_sample_bam_aligned_shifted}"
+      echo "tmp files: ~{d}{this_sample_fastq}   ~{d}{this_sample_fastq_shifted}    ~{d}{this_sample_bam_aligned}    ~{d}{this_sample_bam_aligned_shifted}"
       touch "~{d}{sample_name}.aligned.bam"
-      /usr/gitc/~{this_bwa_commandline} "~{d}{this_sample_fastq}" - 2> >(tee "~{d}{this_output_bam_basename}.bwa.stderr.log" >&2) > "~{d}{this_sample_bam_shifted}"
+      /usr/gitc/~{this_bwa_commandline} "~{d}{this_sample_fastq}" - 2> >(tee "~{d}{this_output_bam_basename}.bwa.stderr.log" >&2) > "~{d}{this_sample_bam_aligned}"
       ls out/*.aligned.bam
       java -Xms3072m "-Xmx~{command_mem}m" -jar /usr/gitc/picard.jar \
         MergeBamAlignment \
@@ -1895,7 +1900,7 @@ task ParallelMongoAlignToMtRegShiftedAndMetrics {
         ATTRIBUTES_TO_RETAIN=X0 \
         ATTRIBUTES_TO_REMOVE=NM \
         ATTRIBUTES_TO_REMOVE=MD \
-        ALIGNED_BAM="~{d}{this_sample_bam_shifted}" \
+        ALIGNED_BAM="~{d}{this_sample_bam_aligned}" \
         UNMAPPED_BAM="~{d}{this_bam}" \
         OUTPUT="~{d}{this_sample}.mba.bam" \
         REFERENCE_SEQUENCE="~{d}{this_mt_cat_fasta}" \
@@ -2044,7 +2049,7 @@ task ParallelMongoAlignToMtRegShiftedAndMetrics {
         python ~{JsonTools} \
         --path out/jsonout.json \
         --set-int mean_coverage="$(cat ~{d}{this_sample}_r2_mean_coverage.txt)" \
-                  idx="~{d}idx" \
+                  idx="~{d}{idx}" \
         --set-float median_coverage="$(cat ~{d}{this_sample}_r2_median_coverage.txt)" \
         --set samples="~{d}{this_sample_t}" \
           mt_aligned_bam="~{d}{this_output_bam_basename}.bam" \
@@ -2181,34 +2186,35 @@ task ParallelMongoCallMtAndShifted {
     mkdir out
     touch out/lockfile.lock
 
+    sampleNames=('~{sep="' '" sample_base_name}')
+    bams=('~{sep="' '" input_bam}')
+    intervals=('~{sep="' '" mt_interval_list}')
+    fastas=('~{sep="' '" mt_self}')
+    force_call_self=('~{sep="' '" force_call_vcf}')
+    shifted_bams=('~{sep="' '" shifted_input_bam}')
+    shifted_intervals=('~{sep="' '" shifted_mt_interval_list}')
+    shifted_fastas=('~{sep="' '" shifted_mt_self}')
+    shifted_force_call_self=('~{sep="' '" shifted_force_call_vcf}')
+
     call_mt_and_shifted() {
       local idx=$1
-      local sampleNames=('~{sep="' '" sample_base_name}')
-      local bams=('~{sep="' '" input_bam}')
-      local intervals=('~{sep="' '" mt_interval_list}')
-      local fastas=('~{sep="' '" mt_self}')
-      local force_call_self=('~{sep="' '" force_call_vcf}')
-      local shifted_bams=('~{sep="' '" shifted_input_bam}')
-      local shifted_intervals=('~{sep="' '" shifted_mt_interval_list}')
-      local shifted_fastas=('~{sep="' '" shifted_mt_self}')
-      local shifted_force_call_self=('~{sep="' '" shifted_force_call_vcf}')
 
-      local this_sample_t=$(echo $sampleNames | cut -d' ' -f$((idx+1)))
-      local this_sample=out/"${this_sample_t}~{suffix}"
+      local this_sample_t="~{d}{sampleNames[idx]}"
+      local this_sample=out/"~{d}{this_sample_t}~{suffix}"
 
-      local this_bam=$(echo $bams | cut -d' ' -f$((idx+1)))
-      local this_noncontrol=$(echo $intervals | cut -d' ' -f$((idx+1)))
-      local this_force_vcf=$(echo $force_call_self | cut -d' ' -f$((idx+1)))
-      local this_self_fasta=$(echo $fastas | cut -d' ' -f$((idx+1)))
-      local this_shifted_bam=$(echo $shifted_bams | cut -d' ' -f$((idx+1)))
-      local this_control=$(echo $shifted_intervals | cut -d' ' -f$((idx+1)))
-      local this_shifted_force_vcf=$(echo $shifted_force_call_self | cut -d' ' -f$((idx+1)))
-      local this_self_shifted_fasta=$(echo $shifted_fastas | cut -d' ' -f$((idx+1)))
+      local this_bam="~{d}{bams[idx]}"
+      local this_noncontrol="~{d}{intervals[idx]}"
+      local this_force_vcf="~{d}{force_call_self[idx]}"
+      local this_self_fasta="~{d}{fastas[idx]}"
+      local this_shifted_bam="~{d}{shifted_bams[idx]}"
+      local this_control="~{d}{shifted_intervals[idx]}"
+      local this_shifted_force_vcf="~{d}{shifted_force_call_self[idx]}"
+      local this_self_shifted_fasta="~{d}{shifted_fastas[idx]}"
 
-      touch "${this_sample}.bamout.bam"
-      touch "${this_sample}.shifted.bamout.bam"
+      touch "~{d}{this_sample}.bamout.bam"
+      touch "~{d}{this_sample}.shifted.bamout.bam"
 
-      samtools index "${this_shifted_bam}"
+      samtools index "~{d}{this_shifted_bam}"
 
       if [[ ~{make_bamout} == 'true' ]]; then bamoutstr="--bam-output ~{d}{this_sample}.bamout.bam"; else bamoutstr=""; fi
       if [[ ~{make_bamout} == 'true' ]]; then shiftedbamoutstr="--bam-output ~{d}{this_sample}.shifted.bamout.bam"; else shiftedbamoutstr=""; fi
@@ -2256,7 +2262,7 @@ task ParallelMongoCallMtAndShifted {
         flock 200
         python ~{JsonTools} \
         --path out/jsonout.json \
-        --set-int idx="~{d}idx" \
+        --set-int idx="~{d}{idx}" \
         --set samples="~{d}{this_sample_t}" \
           raw_vcf="~{d}{this_sample}.raw.vcf" \
           raw_vcf_idx="~{d}{this_sample}.raw.vcf.idx" \
