@@ -64,11 +64,11 @@ task ParallelMongoSubsetBam {
 
     process_sample() {
       local idx=$1
-      local this_bam="~{d}{bam[idx]}"
-      local this_bai="~{d}{bai[idx]}"
-      local this_sample_t="~{d}{sample[idx]}"
+      local this_bam="~{d}{bam[~{d}{idx}]}"
+      local this_bai="~{d}{bai[~{d}{idx}]}"
+      local this_sample_t="~{d}{sample[~{d}{idx}]}"
 
-    echo "curr sample: ~{d}{this_sample_t}"
+      echo "curr sample: ~{d}{this_sample_t}"
       
       local this_sample="out/~{d}{this_sample_t}"
 
