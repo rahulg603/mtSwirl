@@ -64,10 +64,11 @@ task ParallelMongoSubsetBam {
 
     process_sample() {
       local idx=$1
-
       local this_bam="~{d}{bam[idx]}"
       local this_bai="~{d}{bai[idx]}"
       local this_sample_t="~{d}{sample[idx]}"
+
+    echo "curr sample: ~{d}{this_sample_t}"
       
       local this_sample="out/~{d}{this_sample_t}"
 
@@ -217,7 +218,7 @@ task ParallelMongoProcessBamAndRevert {
       local this_bai="~{d}{bai[idx]}"
       local this_flagstat="~{d}{flagstat[idx]}"
       local this_sample_t="~{d}{sample[idx]}"
-      echo "curr sample: ~{d}{this_sample_t}"
+
       local this_sample="out/~{d}{this_sample_t}"
 
       echo "Starting processBAM ~{d}{this_sample_t} at $(date +"%Y-%m-%d %T.%3N")."
