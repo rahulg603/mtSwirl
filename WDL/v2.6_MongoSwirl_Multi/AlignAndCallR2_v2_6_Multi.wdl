@@ -1,6 +1,7 @@
 version 1.0
 
-import "https://raw.githubusercontent.com/gnchau/mtSwirl/master/WDL/v2.6_MongoSwirl_Multi/Parallel_MongoTasks_v2_6_Multi.wdl" as MongoTasks_Multi
+import "https://raw.githubusercontent.com/gnchau/mtSwirl/master/WDL/v2.6_MongoSwirl_Multi/Parallel_MongoTasks_v2_6_Multi.wdl" as ParallelMongoTasks_Multi
+import "https://raw.githubusercontent.com/gnchau/mtSwirl/master/WDL/v2.6_MongoSwirl_Multi/MongoTasks_v2_6_Multi.wdl" as MongoTasks_Multi
 
 workflow ParallelAlignAndCallR2 {
   meta {
@@ -73,7 +74,7 @@ workflow ParallelAlignAndCallR2 {
     unmapped_bam: "Unmapped and subset bam, optionally with original alignment (OA) tag"
   }
 
-  call MongoTasks_Multi.ParallelMongoAlignToMtRegShiftedAndMetrics as AlignToMtRegShiftedAndMetrics {
+  call ParallelMongoTasks_Multi.ParallelMongoAlignToMtRegShiftedAndMetrics as AlignToMtRegShiftedAndMetrics {
     input:
       input_bam = unmapped_bam,
       sample_base_name = sample_name,
@@ -108,7 +109,7 @@ workflow ParallelAlignAndCallR2 {
 
   Int M2_mem = if AlignToMtRegShiftedAndMetrics.max_mean_coverage > 25000 then 14 else 7
 
-  call MongoTasks_Multi.ParallelMongoCallMtAndShifted as CallMtAndShifted {
+  call ParallelMongoTasks_Multi.ParallelMongoCallMtAndShifted as CallMtAndShifted {
     input:
       sample_base_name = AlignToMtRegShiftedAndMetrics.samples,
       suffix = suffix,
