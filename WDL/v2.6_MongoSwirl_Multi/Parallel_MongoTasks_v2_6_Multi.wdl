@@ -1144,8 +1144,8 @@ task MongoHC {
       sample=('~{sep="' '" sample_name}')
       cram=('~{sep="' '" input_bam}')
 
-      local this_sample_t="{d}{sample[idx]}"
-      local this_cram="{d}{cram[idx]}"
+      local this_sample_t="~{d}{sample[idx]}"
+      local this_cram="~{d}{cram[idx]}"
       
       this_sample="out/~{d}{this_sample_t}"
       this_basename="~{d}{this_sample}""~{suffix}"
