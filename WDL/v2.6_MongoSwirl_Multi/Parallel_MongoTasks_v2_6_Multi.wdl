@@ -58,15 +58,16 @@ task ParallelMongoSubsetBam {
     mkdir out
     touch out/lockfile.lock
 
-    bam=('~{sep="' '" input_bam}')
-    bai=('~{sep="' '" input_bai}')
-    sample=('~{sep="' '" sample_name}')
-
     process_sample() {
       local idx=$1
-      local this_bam="~{d}{bam[~{d}{idx}]}"
-      local this_bai="~{d}{bai[~{d}{idx}]}"
-      local this_sample_t="~{d}{sample[~{d}{idx}]}"
+
+      bam=('~{sep="' '" input_bam}')
+      bai=('~{sep="' '" input_bai}')
+      sample=('~{sep="' '" sample_name}')
+
+      local this_bam="~{d}{bam[idx]}"
+      local this_bai="~{d}{bai[idx]}"
+      local this_sample_t="~{d}{sample[idx]}"
 
       echo "curr sample: ~{d}{this_sample_t}"
       
@@ -206,13 +207,13 @@ task ParallelMongoProcessBamAndRevert {
     mkdir out
     touch out/lockfile.lock
 
-    bam=('~{sep="' '" subset_bam}')
-    bai=('~{sep="' '" subset_bai}')
-    sample=('~{sep="' '" sample_name}')
-    flagstat=('~{sep="' '" flagstat_pre_metrics}')
-
     process_sample_and_revert() {
       local idx=$1
+
+      bam=('~{sep="' '" subset_bam}')
+      bai=('~{sep="' '" subset_bai}')
+      sample=('~{sep="' '" sample_name}')
+      flagstat=('~{sep="' '" flagstat_pre_metrics}')
 
       local this_bam="~{d}{bam[idx]}"
       local this_bai="~{d}{bai[idx]}"
@@ -1137,10 +1138,11 @@ task MongoHC {
     mkdir out
     touch out/lockfile.lock
 
-    sample=('~{sep="' '" sample_name}')
-    cram=('~{sep="' '" input_bam}')
     haplotype_caller_mt() {
       local idx=$1
+
+      sample=('~{sep="' '" sample_name}')
+      cram=('~{sep="' '" input_bam}')
 
       local this_sample_t="{d}{sample[idx]}"
       local this_cram="{d}{cram[idx]}"
@@ -1851,16 +1853,16 @@ task ParallelMongoAlignToMtRegShiftedAndMetrics {
     mkdir out
     touch out/lockfile.lock
 
-    sample=('~{sep="' '" sample_base_name}')
-    bam=('~{sep="' '" input_bam}')
-    mt_intervals=('~{sep="' '" mt_interval_list}')
-    mt_cat_fasta=('~{sep="' '" mt_cat}')
-    mt_fasta=('~{sep="' '" mt}')
-    mt_shifted_cat_fasta=('~{sep="' '" mt_shifted_cat}')
-    mt_shifted_fasta=('~{sep="' '" mt_shifted}')
-
     align_to_mt_reg_shifted_metrics() {
       local idx=$1
+
+      sample=('~{sep="' '" sample_base_name}')
+      bam=('~{sep="' '" input_bam}')
+      mt_intervals=('~{sep="' '" mt_interval_list}')
+      mt_cat_fasta=('~{sep="' '" mt_cat}')
+      mt_fasta=('~{sep="' '" mt}')
+      mt_shifted_cat_fasta=('~{sep="' '" mt_shifted_cat}')
+      mt_shifted_fasta=('~{sep="' '" mt_shifted}')
 
       this_sample_t="~{d}{sample[idx]}"
       this_bam="~{d}{bam[idx]}"
@@ -2188,18 +2190,18 @@ task ParallelMongoCallMtAndShifted {
     mkdir out
     touch out/lockfile.lock
 
-    sampleNames=('~{sep="' '" sample_base_name}')
-    bams=('~{sep="' '" input_bam}')
-    intervals=('~{sep="' '" mt_interval_list}')
-    fastas=('~{sep="' '" mt_self}')
-    force_call_self=('~{sep="' '" force_call_vcf}')
-    shifted_bams=('~{sep="' '" shifted_input_bam}')
-    shifted_intervals=('~{sep="' '" shifted_mt_interval_list}')
-    shifted_fastas=('~{sep="' '" shifted_mt_self}')
-    shifted_force_call_self=('~{sep="' '" shifted_force_call_vcf}')
-
     call_mt_and_shifted() {
       local idx=$1
+
+      sampleNames=('~{sep="' '" sample_base_name}')
+      bams=('~{sep="' '" input_bam}')
+      intervals=('~{sep="' '" mt_interval_list}')
+      fastas=('~{sep="' '" mt_self}')
+      force_call_self=('~{sep="' '" force_call_vcf}')
+      shifted_bams=('~{sep="' '" shifted_input_bam}')
+      shifted_intervals=('~{sep="' '" shifted_mt_interval_list}')
+      shifted_fastas=('~{sep="' '" shifted_mt_self}')
+      shifted_force_call_self=('~{sep="' '" shifted_force_call_vcf}')
 
       local this_sample_t="~{d}{sampleNames[idx]}"
       local this_sample=out/"~{d}{this_sample_t}~{suffix}"
