@@ -69,14 +69,14 @@ task ParallelMongoSubsetBam {
       local this_bai="~{d}{bai[idx]}"
       local this_sample_t="~{d}{sample[idx]}"
 
-      echo "curr sample: ~{d}{this_sample_t}"
-      
       local this_sample="out/~{d}{this_sample_t}"
 
-      ~{if force_manual_download then "gsutil " + requester_pays_prefix + " cp $this_bam bamfile_$idx.cram" else ""}
-      ~{if force_manual_download then "gsutil " + requester_pays_prefix + " cp $this_bai bamfile_$idx.cram.crai" else ""}
-      ~{if force_manual_download then "this_bam=bamfile_$idx.cram" else ""}
-      ~{if force_manual_download then "this_bai=bamfile_$idx.cram.crai" else ""}
+      echo "curr sample: ~{d}{this_sample_t}"
+
+      ~{if force_manual_download then "gsutil " + requester_pays_prefix + " cp ~{d}{this_bam} bamfile_~{d}{idx}.cram" else ""}
+      ~{if force_manual_download then "gsutil " + requester_pays_prefix + " cp ~{d}{this_bai} bamfile_~{d}{idx}.cram.crai" else ""}
+      ~{if force_manual_download then "this_bam=bamfile_~{d}{idx}.cram" else ""}
+      ~{if force_manual_download then "this_bai=bamfile_~{d}{idx}.cram.crai" else ""}
 
       set +e
       SAMERR=$(/usr/bin/samtools-1.9/samtools idxstats "~{d}{this_bam}" --threads ~{nthreads} 2>&1 > "~{d}{this_sample}.stats.tsv")
@@ -84,7 +84,7 @@ task ParallelMongoSubsetBam {
       set -e
 
       SAMERRFAIL=$(echo $SAMERR | grep 'samtools idxstats: failed to process \".*.cram\"$' | wc -l | sed 's/^ *//g')
-      echo "~{d}{this_sample}: samtools exited with status ~{d}{thisexit}. Match status was ~{d}{SAMERRFAIL}."
+      echo "~{d}{this_sample_t}: samtools exited with status ~{d}{thisexit}. Match status was ~{d}{SAMERRFAIL}."
 
       if [ $thisexit -eq 0 ] && [ $SAMERRFAIL -eq 0 ]; then
         /usr/bin/samtools-1.9/samtools flagstat "~{d}{this_bam}" --threads ~{nthreads} > "~{d}{this_sample}.flagstat.pre.txt"
@@ -97,7 +97,8 @@ task ParallelMongoSubsetBam {
           --read-filter MateOnSameContigOrNoMappedMateReadFilter \
           --read-filter MateUnmappedAndUnmappedReadFilter \
           ~{"--gcs-project-for-requester-pays " + requester_pays_project} \
-          ~{if force_manual_download then '-I bamfile.cram --read-index bamfile.cram.crai' else "-I ~{d}{this_bam} --read-index ~{d}{this_bai}"} \
+          -I "~{d}{this_bam}" --read-index "~{d}{this_bai}" \
+          # ~{if force_manual_download then "-I bamfile.cram --read-index bamfile.cram.crai" else "-I ~{d}{this_bam} --read-index ~{d}{this_bai}"} \
           -O "~{d}{this_sample}.bam"
           
         echo "~{d}{this_sample_t}: completed gatk. Writing to json output."
@@ -112,19 +113,23 @@ task ParallelMongoSubsetBam {
                 idxstats_metrics="~{d}{this_sample}.stats.tsv" \
                 flagstat_pre_metrics="~{d}{this_sample}.flagstat.pre.txt"
           } 200>"out/lockfile.lock"
+      
       elif [ $thisexit -eq 1 ] && [ $SAMERRFAIL -eq 1 ]; then
-        echo "Samtools exited with status ${thisexit} and ${SAMERR}."
-        echo "Thus, sample ${this_sample} is skipped."
+        echo "Samtools exited with status ~{d}{thisexit} and ~{d}{SAMERR}."
+        echo "Thus, sample ~{d}{this_sample_t} is skipped."
       else
-        echo "ERROR: samtools exited with the failure (match ${SAMERRFAIL}): ${SAMERR}."
-        echo "ERROR: samtools exited with the exit status: ${thisexit}"
-        exit "${thisexit}"
+        echo "ERROR: samtools exited with the failure (match ~{d}{SAMERRFAIL}): ~{d}{SAMERR}."
+        echo "ERROR: samtools exited with the exit status: ~{d}{thisexit}"
+        exit "~{d}{thisexit}"
       fi
     }
     export -f process_sample
+    
     # let's overwrite the n cpu by asking bash
     n_cpu_t=$(nproc)
     seq 0 $((~{length(input_bam)}-1)) | xargs -n 1 -P 18 -I {} bash -c 'process_sample "$@"' _ {}
+
+    # enforce ordering of json
     python <<EOF
   import json
   with open('out/jsonout.json', 'r') as json_file:
@@ -195,7 +200,7 @@ task ParallelMongoProcessBamAndRevert {
   String d = "$" # a stupid trick to get ${} indexing in bash to work in Cromwell
   
   meta {
-    description: "Processes a whole genome bam to just Mitochondria reads"
+    description: "Processes a whole genome bam to just Mitochondria reads in parallel"
   }
   parameter_meta {
     ref_fasta: "Reference is only required for cram input. If it is provided ref_fasta_index and ref_dict are also required."
@@ -226,15 +231,15 @@ task ParallelMongoProcessBamAndRevert {
 
       R --vanilla <<EOF 
         vec <- readLines("~{d}{this_flagstat}")
-        titles <- c("total", "secondary", "supplementary", "duplicates", "mapped", "paired", "read1", "read2", "properly_paired", "with_itself_and_mate_mapped", "singletons", "mate_diff_chr", "mate_diff_chr_mapq_5")
-        get_ele <- function(x) gregexpr("^[0-9]+",x)[[1]]
-        results_vec <- as.numeric(sapply(vec, function(x) substr(x, get_ele(x)[1], get_ele(x)[1] + attr(get_ele(x), "match.length") - 1)))
+        titles <- c('total', 'secondary', 'supplementary', 'duplicates', 'mapped', 'paired', 'read1', 'read2', 'properly_paired', 'with_itself_and_mate_mapped', 'singletons', 'mate_diff_chr', 'mate_diff_chr_mapq_5')
+        get_ele <- function(x) gregexpr('^[0-9]+',x)[[1]]
+        results_vec <- as.numeric(sapply(vec, function(x) substr(x, get_ele(x)[1], get_ele(x)[1] + attr(get_ele(x), 'match.length') - 1)))
         names(results_vec) <- titles
         df <- do.call(data.frame, as.list(results_vec))
-        write.table(df, sep ="\t", row.names = F, file = "~{d}{this_sample}.flagstat.txt", quote = F)
+        write.table(df, sep ='\t', row.names = F, file = "~{d}{this_sample}.flagstat.txt", quote = F)
   EOF
       
-      gatk CollectQualityYieldMetrics \
+      gatk --java-options "-Xmx~{command_mem}m" CollectQualityYieldMetrics \
       -I "~{d}{this_bam}" \
       ~{"-R " + ref_fasta} \
       -O "~{d}{this_sample}.yield_metrics.tmp.txt"
@@ -295,7 +300,7 @@ task ParallelMongoProcessBamAndRevert {
       echo "Now preprocessing subsetted bam..."
       gatk --java-options "-Xmx~{command_mem}m" MarkDuplicates \
         INPUT="~{d}{this_bam}" \
-        OUTPUT="~{d}{this_sample}.md.bam" \
+        OUTPUT="~{d}{this_sample_t}.md.bam" \
         METRICS_FILE="~{d}{this_sample}.duplicate.metrics" \
         VALIDATION_STRINGENCY=SILENT \
         ~{"READ_NAME_REGEX=" + read_name_regex} \
@@ -306,7 +311,7 @@ task ParallelMongoProcessBamAndRevert {
 
       echo "Now sorting md.bam for ~{d}{this_sample_t}"
       gatk --java-options "-Xmx~{command_mem}m" SortSam \
-        INPUT="~{d}{this_sample}.md.bam" \
+        INPUT="~{d}{this_sample_t}.md.bam" \
         OUTPUT="~{d}{this_sample}.proc.bam" \
         SORT_ORDER="coordinate" \
         CREATE_INDEX=true \
@@ -334,30 +339,27 @@ task ParallelMongoProcessBamAndRevert {
         echo "Command failed with exit code $exit_code"
       fi
     }
-
     export -f process_sample_and_revert
+    
     # let's overwrite the n cpu by asking bash
     n_cpu_t=$(nproc)
     echo "Processing bams across ~{d}{n_cpu_t} CPUs..."
     seq 0 $((~{length(subset_bam)}-1)) | xargs -n 1 -P 18 -I {} bash -c 'process_sample_and_revert "$@"' _ {}
     # seq 0 $((~{length(subset_bam)}-1)) | xargs -n 1 -P ~{d}{n_cpu_t} -I {} bash -c 'process_sample_and_revert "$@"' _ {}
 
-
     echo "Finished processing BAMs, now producing output from json..."
     # call loop then read and compute mean_coverage stat to return and output for next step. if that fails, this is the place
+    # enforce ordering of json
     python <<EOF
   import json
   from math import ceil
-
   with open('out/jsonout.json', 'r') as json_file:
     data = json.load(json_file)
   idx = data['idx']
   reordered_data = {key: [value for _, value in sorted(zip(idx, data[key]))] for key in data.keys()}
+  this_max = ceil(max(reordered_data['mean_coverage']))
   with open('out/jsonout.json', 'w') as json_file:
     json.dump(reordered_data, json_file, indent=4)
-  with open("out/jsonout.json", 'r') as json_file:    
-    file_of_interest = json.load(json_file)
-  this_max = ceil(max(file_of_interest['mean_coverage']))
   with open('this_max.txt', 'w') as f:
     f.write(str(this_max))
   EOF
@@ -486,7 +488,7 @@ task MongoSubsetBamToChrMAndRevert {
           ~{if force_manual_download then '-I bamfile.cram --read-index bamfile.cram.crai' else "-I ~{d}{this_bam} --read-index ~{d}{this_bai}"} \
           -O "~{d}{this_sample}.bam"
         
-        gatk --java-options "-Xmx~{command_mem}m" CollectQualityYieldMetrics \
+        gatk CollectQualityYieldMetrics \
         -I "~{d}{this_sample}.bam" \
         ~{"-R " + ref_fasta} \
         -O "~{d}{this_sample}.yield_metrics.tmp.txt"
@@ -504,15 +506,15 @@ task MongoSubsetBamToChrMAndRevert {
         cat output.txt | \
           grep 'ERROR.*Mate not found for paired read' | \
           sed -e 's/ERROR::MATE_NOT_FOUND:Read name //g' | \
-          sed -e 's/, Mate not found for paired read//g' > "~{d}{this_sample_t}.read_list.txt"
-        cat "~{d}{this_sample_t}.read_list.txt" | wc -l | sed 's/^ *//g' > "~{d}{this_sample}.ct_failed.txt"
-        if [[ $(tr -d "\r\n" < "~{d}{this_sample_t}.read_list.txt"|wc -c) -eq 0 ]]; then
+          sed -e 's/, Mate not found for paired read//g' > read_list.txt
+        cat read_list.txt | wc -l | sed 's/^ *//g' > "~{d}{this_sample}.ct_failed.txt"
+        if [[ $(tr -d "\r\n" < read_list.txt|wc -c) -eq 0 ]]; then
           cp "~{d}{this_sample}.bam" rescued.bam
         else
           gatk --java-options "-Xmx~{command_mem}m" FilterSamReads \
             -I "~{d}{this_sample}.bam" \
             -O rescued.bam \
-            -READ_LIST_FILE "~{d}{this_sample_t}.read_list.txt" \
+            -READ_LIST_FILE read_list.txt \
             -FILTER excludeReadList
         fi
 
@@ -549,7 +551,7 @@ task MongoSubsetBamToChrMAndRevert {
         echo "Now preprocessing subsetted bam..."
         gatk --java-options "-Xmx~{command_mem}m" MarkDuplicates \
           INPUT="~{d}{this_sample}.bam" \
-          OUTPUT="~{d}{this_sample}.md.bam" \
+          OUTPUT=md.bam \
           METRICS_FILE="~{d}{this_sample}.duplicate.metrics" \
           VALIDATION_STRINGENCY=SILENT \
           ~{"READ_NAME_REGEX=" + read_name_regex} \
@@ -559,7 +561,7 @@ task MongoSubsetBamToChrMAndRevert {
           ADD_PG_TAG_TO_READS=false
 
         gatk --java-options "-Xmx~{command_mem}m" SortSam \
-          INPUT="~{d}{this_sample}.md.bam" \
+          INPUT=md.bam \
           OUTPUT="~{d}{this_sample}.proc.bam" \
           SORT_ORDER="coordinate" \
           CREATE_INDEX=true \
@@ -599,13 +601,13 @@ task MongoSubsetBamToChrMAndRevert {
   EOF
   >>>
   runtime {
-    # memory: machine_mem + " GB"
-    # disks: "local-disk " + disk_size + " SSD"
+    memory: machine_mem + " GB"
+    disks: "local-disk " + disk_size + " SSD"
     docker: select_first([gatk_docker_override, "us.gcr.io/broad-gatk/gatk:"+gatk_version])
-    # preemptible: select_first([preemptible_tries, 5])
-    # cpu: select_first([n_cpu, 1])
+    preemptible: select_first([preemptible_tries, 5])
+    cpu: select_first([n_cpu,1])
     #mem2_ssd1_v2_x16 works well but seems to be susceptible to spotinstance interruptions
-    dx_instance_type: "mem2_ssd1_v2_x16"
+    #dx_instance_type: "mem2_ssd1_v2_x16"
   }
   output {
     Object obj_out = read_json("out/jsonout.json")
@@ -1145,14 +1147,16 @@ task MongoHC {
       cram=('~{sep="' '" input_bam}')
 
       local this_sample_t="~{d}{sample[idx]}"
+      local this_sample_suff="~{d}{this_sample_t}~{suffix}"
       local this_cram="~{d}{cram[idx]}"
+
+      local this_sample="out/~{d}{this_sample_t}"
+      local this_basename="~{d}{this_sample}""~{suffix}"
+      local bamoutfile="~{d}{this_basename}.bamout.bam"
       
-      this_sample="out/~{d}{this_sample_t}"
-      this_basename="~{d}{this_sample}""~{suffix}"
-      bamoutfile="~{d}{this_basename}.bamout.bam"
       touch "~{d}{bamoutfile}"
 
-      if [[ ~{make_bamout} == 'true' ]]; then bamoutstr="--bam-output ~{d}{this_basename}.bamout.bam"; else bamoutstr=""; fi
+      if [[ ~{make_bamout} == 'true' ]]; then bamoutstr="--bam-output ~{d}{bamoutfile}"; else bamoutstr=""; fi
         
       gatk --java-options "-Xmx~{command_mem}m" HaplotypeCaller \
         -R ~{ref_fasta} \
@@ -1169,10 +1173,10 @@ task MongoHC {
         -GQB 10 -GQB 20 -GQB 30 -GQB 40 -GQB 50 -GQB 60 -GQB 70 -GQB 80 -GQB 90 ~{d}{bamoutstr}
 
       echo "Now applying hard filters..."
-      gatk --java-options "-Xmx~{command_mem}m" SelectVariants -V "~{d}{this_basename}.raw.vcf" -select-type SNP -O "~{d}{this_sample}.snps.vcf"
-      gatk --java-options "-Xmx~{command_mem}m" VariantFiltration -V "~{d}{this_sample}.snps.vcf" \
+      gatk --java-options "-Xmx~{command_mem}m" SelectVariants -V "~{d}{this_basename}.raw.vcf" -select-type SNP -O "~{d}{this_sample_suff}.snps.vcf"
+      gatk --java-options "-Xmx~{command_mem}m" VariantFiltration -V "~{d}{this_sample_suff}.snps.vcf" \
         -R ~{ref_fasta} \
-        -O "~{d}{this_sample}.snps_filtered.vcf" \
+        -O "~{d}{this_sample_suff}.snps_filtered.vcf" \
         -filter "QD < 2.0" --filter-name "QD2" \
         -filter "QUAL < 30.0" --filter-name "QUAL30" \
         -filter "SOR > 3.0" --filter-name "SOR3" \
@@ -1184,10 +1188,10 @@ task MongoHC {
         --genotype-filter-expression "isHomRef == 1" --genotype-filter-name "isHomRefFilt" \
         ~{'--genotype-filter-expression "DP < ' + hc_dp_lower_bound + '" --genotype-filter-name "genoDP' + hc_dp_lower_bound + '"'}
 
-      gatk --java-options "-Xmx~{command_mem}m" SelectVariants -V "~{d}{this_basename}.raw.vcf" -select-type INDEL -O "~{d}{this_sample}.indels.vcf"
-      gatk --java-options "-Xmx~{command_mem}m" VariantFiltration -V "~{d}{this_sample}.indels.vcf" \
+      gatk --java-options "-Xmx~{command_mem}m" SelectVariants -V "~{d}{this_basename}.raw.vcf" -select-type INDEL -O "~{d}{this_sample_suff}.indels.vcf"
+      gatk --java-options "-Xmx~{command_mem}m" VariantFiltration -V "~{d}{this_sample_suff}.indels.vcf" \
         -R ~{ref_fasta} \
-        -O "~{d}{this_sample}.indels_filtered.vcf" \
+        -O "~{d}{this_sample_suff}.indels_filtered.vcf" \
         -filter "QD < 2.0" --filter-name "QD2" \
         -filter "QUAL < 30.0" --filter-name "QUAL30" \
         -filter "FS > 200.0" --filter-name "FS200" \
@@ -1197,7 +1201,7 @@ task MongoHC {
         --genotype-filter-expression "isHomRef == 1" --genotype-filter-name "isHomRefFilt" \
         ~{'--genotype-filter-expression "DP < ' + hc_dp_lower_bound + '" --genotype-filter-name "genoDP' + hc_dp_lower_bound + '"'}
 
-      gatk --java-options "-Xmx~{command_mem}m" MergeVcfs -I "~{d}{this_sample}.snps_filtered.vcf" -I "~{d}{this_sample}.indels_filtered.vcf" -O "~{d}{this_basename}.vcf"
+      gatk --java-options "-Xmx~{command_mem}m" MergeVcfs -I "~{d}{this_sample_suff}.snps_filtered.vcf" -I "~{d}{this_sample_suff}.indels_filtered.vcf" -O "~{d}{this_basename}.vcf"
 
       echo "Now filtering VCF..."
       gatk --java-options "-Xmx~{command_mem}m" SelectVariants \
@@ -1207,7 +1211,7 @@ task MongoHC {
         --exclude-non-variants \
         -O "~{d}{this_basename}.pass.vcf"
 
-      gatk --java-options "-Xmx~{command_mem}m" CountVariants -V $this_basename.pass.vcf | tail -n1 > "~{d}{this_basename}.passvars.txt"
+      gatk --java-options "-Xmx~{command_mem}m" CountVariants -V "~{d}{this_basename}.pass.vcf" | tail -n1 > "~{d}{this_basename}.passvars.txt"
 
       echo "Now splitting multi-allelics..."
       gatk --java-options "-Xmx~{command_mem}m" LeftAlignAndTrimVariants \
@@ -1218,6 +1222,7 @@ task MongoHC {
         --dont-trim-alleles \
         --keep-original-ac \
         --create-output-variant-index
+
       {
         flock 200
         python ~{JsonTools} \
@@ -1242,6 +1247,7 @@ task MongoHC {
     n_cp_t=$(nproc)
     seq 0 $((~{length(input_bam)}-1)) | xargs -n 1 -P 18 -I {} bash -c 'haplotype_caller_mt "$@"' _ {}
 
+    # enforce ordering of json
     python <<EOF
   import json
   with open('out/jsonout.json', 'r') as json_file:
@@ -1864,27 +1870,29 @@ task ParallelMongoAlignToMtRegShiftedAndMetrics {
       mt_shifted_cat_fasta=('~{sep="' '" mt_shifted_cat}')
       mt_shifted_fasta=('~{sep="' '" mt_shifted}')
 
-      this_sample_t="~{d}{sample[idx]}"
-      this_bam="~{d}{bam[idx]}"
-      this_mt_intervals="~{d}{mt_intervals[idx]}"
-      this_mt_cat_fasta="~{d}{mt_cat_fasta[idx]}"
-      this_mt_fasta="~{d}{mt_fasta[idx]}"
-      this_mt_shifted_cat_fasta="~{d}{mt_shifted_cat_fasta[idx]}"
-      this_mt_shifted_fasta="~{d}{mt_shifted_fasta[idx]}"
+      local this_sample_t="~{d}{sample[idx]}"
+      local this_bam="~{d}{bam[idx]}"
+      local this_mt_intervals="~{d}{mt_intervals[idx]}"
+      local this_mt_cat_fasta="~{d}{mt_cat_fasta[idx]}"
+      local this_mt_fasta="~{d}{mt_fasta[idx]}"
+      local this_mt_shifted_cat_fasta="~{d}{mt_shifted_cat_fasta[idx]}"
+      local this_mt_shifted_fasta="~{d}{mt_shifted_fasta[idx]}"
 
-      local this_sample=out/"~{d}{this_sample_t}"
+      local this_sample_suff="~{d}{this_sample_t}~{suffix}"
+      local this_sample=out/"~{d}{this_sample_suff}"
 
-      local this_sample_fastq="~{d}{this_sample}".fastq
-      local this_sample_fastq_shifted="~{d}{this_sample}".shifted.fastq
+      local this_sample_fastq="~{d}{this_sample_suff}".fastq
+      local this_sample_fastq_shifted="~{d}{this_sample_suff}".shifted.fastq
+      local this_sample_bam_aligned="~{d}{this_sample_suff}".aligned.bam
+      local this_sample_bam_aligned_shifted="~{d}{this_sample_suff}".shifted.aligned.bam
 
-      local this_sample_bam_aligned="~{d}{this_sample}".aligned.bam
-      local this_sample_bam_aligned_shifted="~{d}{this_sample}".shifted.aligned.bam
-
-      local this_output_bam_basename=out/"~{d}(basename ~{d}{this_bam} .bam).remap~{suffix}"
+      local this_output_bam_basename=out/"$(basename ~{d}{this_bam} .bam).remap~{suffix}"
       
+      echo "tmp files: ~{d}{this_sample_fastq}   ~{d}{this_sample_fastq_shifted}    ~{d}{this_sample_bam_aligned}    ~{d}{this_sample_bam_aligned_shifted}"
+
       # set the bash variable needed for the command-line
       /usr/gitc/bwa index "~{d}{this_mt_cat_fasta}"
-      bash_ref_fasta="~{d}{this_mt_cat_fasta}"
+      local bash_ref_fasta="~{d}{this_mt_cat_fasta}"
 
       java -Xms3072m "-Xmx~{command_mem}m" -jar /usr/gitc/picard.jar \
         SamToFastq \
@@ -1893,10 +1901,10 @@ task ParallelMongoAlignToMtRegShiftedAndMetrics {
         INTERLEAVE=true \
         NON_PF=true
 
-      echo "tmp files: ~{d}{this_sample_fastq}   ~{d}{this_sample_fastq_shifted}    ~{d}{this_sample_bam_aligned}    ~{d}{this_sample_bam_aligned_shifted}"
-      touch "~{d}{sample_name}.aligned.bam"
       /usr/gitc/~{this_bwa_commandline} "~{d}{this_sample_fastq}" - 2> >(tee "~{d}{this_output_bam_basename}.bwa.stderr.log" >&2) > "~{d}{this_sample_bam_aligned}"
+
       ls out/*.aligned.bam
+      
       java -Xms3072m "-Xmx~{command_mem}m" -jar /usr/gitc/picard.jar \
         MergeBamAlignment \
         VALIDATION_STRINGENCY=SILENT \
@@ -1906,7 +1914,7 @@ task ParallelMongoAlignToMtRegShiftedAndMetrics {
         ATTRIBUTES_TO_REMOVE=MD \
         ALIGNED_BAM="~{d}{this_sample_bam_aligned}" \
         UNMAPPED_BAM="~{d}{this_bam}" \
-        OUTPUT="~{d}{this_sample}.mba.bam" \
+        OUTPUT="~{d}{this_sample_suff}.mba.bam" \
         REFERENCE_SEQUENCE="~{d}{this_mt_cat_fasta}" \
         PAIRED_RUN=true \
         SORT_ORDER="unsorted" \
@@ -1928,8 +1936,8 @@ task ParallelMongoAlignToMtRegShiftedAndMetrics {
 
       java -Xms3072m "-Xmx~{command_mem}m" -jar /usr/gitc/picard.jar \
         MarkDuplicates \
-        INPUT="~{d}{this_sample}.mba.bam" \
-        OUTPUT="~{d}{this_sample}.md.bam" \
+        INPUT="~{d}{this_sample_suff}.mba.bam" \
+        OUTPUT="~{d}{this_sample_suff}.md.bam" \
         METRICS_FILE="~{d}{this_output_bam_basename}.metrics" \
         VALIDATION_STRINGENCY=SILENT \
         ~{"READ_NAME_REGEX=" + read_name_regex} \
@@ -1942,11 +1950,12 @@ task ParallelMongoAlignToMtRegShiftedAndMetrics {
 
       java -Xms3072m "-Xmx~{command_mem}m" -jar /usr/gitc/picard.jar \
         SortSam \
-        INPUT="~{d}{this_sample}.md.bam" \
+        INPUT="~{d}{this_sample_suff}.md.bam" \
         OUTPUT="~{d}{this_output_bam_basename}_pre_mt_filt.bam" \
         SORT_ORDER="coordinate" \
         CREATE_INDEX=true \
         MAX_RECORDS_IN_RAM=300000
+      
       echo "md_filt BAM files:"
       ls out/*_pre_mt_filt.bam
       # now we have to subset to mito and update sequence dictionary
@@ -1961,7 +1970,7 @@ task ParallelMongoAlignToMtRegShiftedAndMetrics {
       echo "Now starting on shifted..."
       # set the bash variable needed for the command-line
       /usr/gitc/bwa index "~{d}{this_mt_shifted_cat_fasta}"
-      bash_ref_fasta="~{d}{this_mt_shifted_cat_fasta}"
+      local bash_ref_fasta="~{d}{this_mt_shifted_cat_fasta}"
       java -Xms3072m "-Xmx~{command_mem}m" -jar /usr/gitc/picard.jar \
         SamToFastq \
         INPUT="~{d}{this_bam}" \
@@ -1969,7 +1978,7 @@ task ParallelMongoAlignToMtRegShiftedAndMetrics {
         INTERLEAVE=true \
         NON_PF=true
 
-      /usr/gitc/~{this_bwa_commandline} "~{d}{this_sample_fastq_shifted}" - 2> >(tee "~{d}{this_output_bam_basename}.bwa.stderr.log" >&2) > "~{d}{this_sample_bam_aligned_shifted}"
+      /usr/gitc/~{this_bwa_commandline} "~{d}{this_sample_fastq_shifted}" - 2> >(tee "~{d}{this_output_bam_basename}.shifted.bwa.stderr.log" >&2) > "~{d}{this_sample_bam_aligned_shifted}"
 
       java -Xms3072m "-Xmx~{command_mem}m" -jar /usr/gitc/picard.jar \
         MergeBamAlignment \
@@ -1980,7 +1989,7 @@ task ParallelMongoAlignToMtRegShiftedAndMetrics {
         ATTRIBUTES_TO_REMOVE=MD \
         ALIGNED_BAM="~{d}{this_sample_bam_aligned_shifted}" \
         UNMAPPED_BAM="~{d}{this_bam}" \
-        OUTPUT="~{d}{this_sample}.mba.shifted.bam" \
+        OUTPUT="~{d}{this_sample_suff}.mba.shifted.bam" \
         REFERENCE_SEQUENCE="~{d}{this_mt_shifted_cat_fasta}" \
         PAIRED_RUN=true \
         SORT_ORDER="unsorted" \
@@ -2002,8 +2011,8 @@ task ParallelMongoAlignToMtRegShiftedAndMetrics {
 
       java -Xms3072m "-Xmx~{command_mem}m" -jar /usr/gitc/picard.jar \
         MarkDuplicates \
-        INPUT="~{d}{this_sample}.mba.shifted.bam" \
-        OUTPUT="~{d}{this_sample}.md.shifted.bam" \
+        INPUT="~{d}{this_sample_suff}.mba.shifted.bam" \
+        OUTPUT="~{d}{this_sample_suff}.md.shifted.bam" \
         METRICS_FILE="~{d}{this_output_bam_basename}.shifted.metrics" \
         VALIDATION_STRINGENCY=SILENT \
         ~{"READ_NAME_REGEX=" + read_name_regex} \
@@ -2014,7 +2023,7 @@ task ParallelMongoAlignToMtRegShiftedAndMetrics {
 
       java -Xms3072m "-Xmx~{command_mem}m" -jar /usr/gitc/picard.jar \
         SortSam \
-        INPUT="~{d}{this_sample}.md.shifted.bam" \
+        INPUT="~{d}{this_sample_suff}.md.shifted.bam" \
         OUTPUT="~{d}{this_output_bam_basename}.shifted_pre_mt_filt.bam" \
         SORT_ORDER="coordinate" \
         CREATE_INDEX=true \
@@ -2075,20 +2084,17 @@ task ParallelMongoAlignToMtRegShiftedAndMetrics {
     n_cp_t=$(nproc)
     seq 0 $((~{length(input_bam)}-1)) | xargs -n 1 -P 18 -I {} bash -c 'align_to_mt_reg_shifted_metrics "$@"' _ {}
 
+    # enforce ordering of json and compute maximum mean coverage
     python <<EOF
   import json
   from math import ceil
-
   with open('out/jsonout.json', 'r') as json_file:
     data = json.load(json_file)
   idx = data['idx']
   reordered_data = {key: [value for _, value in sorted(zip(idx, data[key]))] for key in data.keys()}
+  this_max = ceil(max(reordered_data['mean_coverage']))
   with open('out/jsonout.json', 'w') as json_file:
     json.dump(reordered_data, json_file, indent=4)
-
-  with open("out/jsonout.json", 'r') as json_file:    
-    file_of_interest = json.load(json_file)
-  this_max = ceil(max(file_of_interest['mean_coverage']))
   with open('this_max_r2.txt', 'w') as f:
     f.write(str(this_max))
   EOF
@@ -2262,6 +2268,7 @@ task ParallelMongoCallMtAndShifted {
         --read-filter MateUnmappedAndUnmappedReadFilter \
         --max-reads-per-alignment-start ~{max_reads_per_alignment_start} \
         --max-mnp-distance 0 ~{d}{shiftedbamoutstr}
+
       {
         flock 200
         python ~{JsonTools} \
@@ -2284,6 +2291,7 @@ task ParallelMongoCallMtAndShifted {
     echo "len of input bam: $((~{length(input_bam)}-1))"
     seq 0 $((~{length(input_bam)}-1)) | xargs -n 1 -P 18 -I {} bash -c 'call_mt_and_shifted "$@"' _ {}
 
+    # enforce ordering of json
     python <<EOF
   import json
   with open('out/jsonout.json', 'r') as json_file:
@@ -2377,7 +2385,7 @@ task MongoLiftoverCombineMergeFilterContamSplit {
     export GATK_LOCAL_JAR=~{default="/root/gatk.jar" gatk_override}
 
     if [[ ~{defined(verifyBamID)} == 'true' ]]; then
-      arr_verifybam_contamination=(~{sep="' '" select_first([verifyBamID,def2])})
+      arr_verifybam_contamination=('~{sep="' '" select_first([verifyBamID,def2])}')
     else
       arr_verifybam_contamination=($(printf '0.0 %.0s' {1..~{length(sample_base_name)}} | xargs))
     fi
