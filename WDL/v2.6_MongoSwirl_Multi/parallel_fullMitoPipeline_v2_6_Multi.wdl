@@ -4,7 +4,8 @@ import "https://raw.githubusercontent.com/gnchau/mtSwirl/master/WDL/v2.6_MongoSw
 import "https://raw.githubusercontent.com/gnchau/mtSwirl/master/WDL/v2.6_MongoSwirl_Multi/AlignAndCallR2_v2_6_Multi.wdl" as AlignAndCallR2_Multi
 import "https://raw.githubusercontent.com/gnchau/mtSwirl/master/WDL/v2.6_MongoSwirl_Multi/LiftoverTools_v2_6_Multi.wdl" as LiftoverTools_Multi
 import "https://raw.githubusercontent.com/gnchau/mtSwirl/master/WDL/v2.6_MongoSwirl_Multi/ProduceSelfReferenceFiles_v2_6_Multi.wdl" as ProduceSelfReferenceFiles_Multi
-import "https://raw.githubusercontent.com/gnchau/mtSwirl/master/WDL/v2.6_MongoSwirl_Multi/Parallel_MongoTasks_v2_6_Multi.wdl" as MongoTasks_Multi
+import "https://raw.githubusercontent.com/gnchau/mtSwirl/master/WDL/v2.6_MongoSwirl_Multi/Parallel_MongoTasks_v2_6_Multi.wdl" as ParallelMongoTasks_Multi
+import "https://raw.githubusercontent.com/gnchau/mtSwirl/master/WDL/v2.6_MongoSwirl_Multi/MongoTasks_v2_6_Multi.wdl" as MongoTasks_Multi
 
 workflow MitochondriaPipeline {
 
@@ -89,7 +90,7 @@ workflow MitochondriaPipeline {
 
   String self_ref_suffix = ".self.ref"
 
-  call MongoTasks_Multi.ParallelMongoSubsetBam as SubsetBam {
+  call ParallelMongoTasks_Multi.ParallelMongoSubsetBam as SubsetBam {
     input:
       input_bam = wgs_aligned_input_bam_or_cram,
       input_bai = wgs_aligned_input_bam_or_cram_index,
@@ -112,7 +113,7 @@ workflow MitochondriaPipeline {
       preemptible_tries = preemptible_tries
     }
 
-  call MongoTasks_Multi.ParallelMongoProcessBamAndRevert as ProcessBam {
+  call ParallelMongoTasks_Multi.ParallelMongoProcessBamAndRevert as ProcessBam {
     input:
       subset_bam = SubsetBam.subset_bam,
       subset_bai = SubsetBam.subset_bai,
@@ -135,7 +136,7 @@ workflow MitochondriaPipeline {
       preemptible_tries = preemptible_tries
   }
 
-  call AlignAndCallR1_Multi.AlignAndCallR1 as AlignAndCallR1 {
+  call AlignAndCallR1_Multi.ParallelAlignAndCallR1 as AlignAndCallR1 {
     input:
       input_bam = ProcessBam.output_bam,
       input_bai = ProcessBam.output_bai,

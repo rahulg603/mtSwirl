@@ -1,8 +1,9 @@
 version 1.0
 
-import "https://raw.githubusercontent.com/gnchau/mtSwirl/master/WDL/v2.6_MongoSwirl_Multi/Parallel_MongoTasks_v2_6_Multi.wdl" as MongoTasks_Multi
+import "https://raw.githubusercontent.com/gnchau/mtSwirl/master/WDL/v2.6_MongoSwirl_Multi/Parallel_MongoTasks_v2_6_Multi.wdl" as ParallelMongoTasks_Multi
+import "https://raw.githubusercontent.com/gnchau/mtSwirl/master/WDL/v2.6_MongoSwirl_Multi/MongoTasks_v2_6_Multi.wdl" as MongoTasks_Multi
 
-workflow AlignAndCallR1 {
+workflow ParallelAlignAndCallR1 {
   meta {
     description: "Takes in unmapped bam and outputs VCF of SNP/Indel calls on the mitochondria."
   }
@@ -55,7 +56,7 @@ workflow AlignAndCallR1 {
   }
 
   if (use_haplotype_caller_nucdna) {
-    call MongoTasks_Multi.MongoHC as CallNucHCIntegrated {
+    call ParallelMongoTasks_Multi.ParallelMongoHC as CallNucHCIntegrated {
       input:
         input_bam = input_bam,
         input_bai = input_bai,

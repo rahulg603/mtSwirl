@@ -8,6 +8,8 @@ version 1.0
 # - Run test on large sample to prove that this pipeline still works
 
 task MongoSubsetBam {
+  # Specific to multisample analysis, we now skip samples that fail samtools idxstats in a specific way.
+  # This is the only stage where samples can be skipped.
   input {
     Array[File] input_bam
     Array[File] input_bai
@@ -26,12 +28,12 @@ task MongoSubsetBam {
     String gatk_version
     File JsonTools
 
-    Boolean force_manual_download 
+    # runtime
+    Boolean force_manual_download # will download using gsutil cp
     Int? mem
     Int? n_cpu
     Int? preemptible_tries
   }
-
   Float ref_size = if defined(ref_fasta) then size(ref_fasta, "GB") + size(ref_fasta_index, "GB") + size(ref_dict, "GB") else 0
   Int addl_size = ceil((55 * length(sample_name)) / 1000)
   Int disk_size = ceil(ref_size) + ceil(size(input_bam,'GB')) + 20 + addl_size
@@ -40,16 +42,14 @@ task MongoSubsetBam {
   Int nthreads = select_first([n_cpu,1])-1
   String requester_pays_prefix = (if defined(requester_pays_project) then "-u " else "") + select_first([requester_pays_project, ""])
 
-  String d = "$" 
-
+  String d = "$" # a stupid trick to get ${} indexing in bash to work in Cromwell
+  
   meta {
-    description: "Subsets a whole genome bam to just Mitochondria reads in parallel"
+    description: "Subsets a whole genome bam to just Mitochondria reads"
   }
-
   parameter_meta {
     ref_fasta: "Reference is only required for cram input. If it is provided ref_fasta_index and ref_dict are also required."
   }
-
   command <<<
     set -e
     export GATK_LOCAL_JAR=~{default="/root/gatk.jar" gatk_override}
@@ -59,16 +59,16 @@ task MongoSubsetBam {
     bais=('~{sep="' '" input_bai}')
     mkdir out
 
-    function process_sample() {
-      i=$1
+    for i in "~{d}{!sampleNames[@]}"; do
+
       this_bam="~{d}{bams[i]}"
       this_bai="~{d}{bais[i]}"
       this_sample=out/"~{d}{sampleNames[i]}"
 
-      ~{if force_manual_download then "gsutil " + requester_pays_prefix + " cp ~{d}{this_bam} bamfile_$i.cram" else ""}
-      ~{if force_manual_download then "gsutil " + requester_pays_prefix + " cp ~{d}{this_bai} bamfile_$i.cram.crai" else ""}
-      ~{if force_manual_download then "this_bam=bamfile_$i.cram" else ""}
-      ~{if force_manual_download then "this_bai=bamfile_$i.cram.crai" else ""}
+      ~{if force_manual_download then "gsutil " + requester_pays_prefix + " cp ~{d}{this_bam} bamfile.cram" else ""}
+      ~{if force_manual_download then "gsutil " + requester_pays_prefix + " cp ~{d}{this_bai} bamfile.cram.crai" else ""}
+      ~{if force_manual_download then "this_bam=bamfile.cram" else ""}
+      ~{if force_manual_download then "this_bai=bamfile.cram.crai" else ""}
 
       set +e
       SAMERR=$(/usr/bin/samtools-1.9/samtools idxstats "~{d}{this_bam}" --threads ~{nthreads} 2>&1 > "~{d}{this_sample}.stats.tsv")
@@ -90,7 +90,7 @@ task MongoSubsetBam {
           --read-filter MateOnSameContigOrNoMappedMateReadFilter \
           --read-filter MateUnmappedAndUnmappedReadFilter \
           ~{"--gcs-project-for-requester-pays " + requester_pays_project} \
-          ~{if force_manual_download then '-I bamfile_$i.cram --read-index bamfile_$i.cram.crai' else "-I ~{d}{this_bam} --read-index ~{d}{this_bai}"} \
+          ~{if force_manual_download then '-I bamfile.cram --read-index bamfile.cram.crai' else "-I ~{d}{this_bam} --read-index ~{d}{this_bai}"} \
           -O "~{d}{this_sample}.bam"
 
         python ~{JsonTools} \
@@ -109,12 +109,9 @@ task MongoSubsetBam {
         echo "ERROR: samtools exited with the exit status: ~{d}{thisexit}"
         exit "~{d}{thisexit}"
       fi
-    }
-
-    export -f process_sample
-    parallel process_sample ::: "${!sampleNames[@]}"
+    
+    done
   >>>
-
   runtime {
     memory: machine_mem + " GB"
     disks: "local-disk " + disk_size + " HDD"
@@ -122,7 +119,6 @@ task MongoSubsetBam {
     preemptible: select_first([preemptible_tries, 5])
     cpu: select_first([n_cpu,1])
   }
-
   output {
     Object obj_out = read_json("out/jsonout.json")
     Array[String] samples = obj_out.samples
@@ -1754,7 +1750,9 @@ task MongoAlignToMtRegShiftedAndMetrics {
   #Float ref_size = size(mt_cat, "GB") + size(mt_cat_index, "GB")
   #Float shifted_ref_size = size(mt_shifted_cat, "GB") + size(mt_shifted_cat_index, "GB")
   Int disk_size = ceil(size(input_bam, "GB") * 4  + ceil(size(selfref_bundle, 'GB')) * 4) + 20
+
   Int read_length_for_optimization = select_first([read_length, 151])
+
   String d = "$" # a stupid trick to get ${} indexing in bash to work in Cromwell
 
   meta {
@@ -1769,9 +1767,11 @@ task MongoAlignToMtRegShiftedAndMetrics {
 
     set -o pipefail
     set -e
+    
     tar xf "~{selfref_bundle}"
+
     mkdir out
-  
+
     sampleNames=('~{sep="' '" sample_base_name}')
     bams=('~{sep="' '" input_bam}')
     intervals=('~{sep="' '" mt_interval_list}')
@@ -1981,13 +1981,10 @@ task MongoAlignToMtRegShiftedAndMetrics {
   >>>
   runtime {
     preemptible: select_first([preemptible_tries, 5])
-    memory: "50 GB"
+    memory: "6 GB"
     cpu: this_cpu
     disks: "local-disk " + disk_size + " HDD"
     docker: "us.gcr.io/broad-gotc-prod/genomes-in-the-cloud:2.4.2-1552931386"
-    #mem1_ssd1_v2_x2 works well but seems to be susceptible to spotinstance interruptions
-    dx_instance_type: "mem2_ssd1_v2_x16"
-
   }
   output {
     Object obj_out = read_json('out/jsonout.json')
