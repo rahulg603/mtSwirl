@@ -4,7 +4,8 @@ version 1.0
 # These tasks are serial combinations of more modular tasks that were located in each individual WDL.
 # We cannot stream since we need to get coverage estimates.
 # This version of MongoTasks contains only tasks that are capable of utilizing multi-core CPUs.
-
+# Commented code storage:
+# ~{if force_manual_download then "-I bamfile.cram --read-index bamfile.cram.crai" else "-I ~{d}{this_bam} --read-index ~{d}{this_bai}"} \
 # Todo:
 # - Run test on large sample to prove that this pipeline still works
 
@@ -99,7 +100,6 @@ task ParallelMongoSubsetBam {
           --read-filter MateUnmappedAndUnmappedReadFilter \
           ~{"--gcs-project-for-requester-pays " + requester_pays_project} \
           -I "~{d}{this_bam}" --read-index "~{d}{this_bai}" \
-          # ~{if force_manual_download then "-I bamfile.cram --read-index bamfile.cram.crai" else "-I ~{d}{this_bam} --read-index ~{d}{this_bai}"} \
           -O "~{d}{this_sample}.bam"
           
         echo "~{d}{this_sample_t}: completed gatk. Writing to json output."
