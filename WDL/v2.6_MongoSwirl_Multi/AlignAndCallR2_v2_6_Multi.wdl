@@ -68,6 +68,7 @@ workflow ParallelAlignAndCallR2 {
     Int? preemptible_tries
     Int? n_cpu
     Int? n_cpu_bwa
+    Int? batch_size
   }
 
   parameter_meta {
@@ -143,7 +144,7 @@ workflow ParallelAlignAndCallR2 {
       gatk_version = gatk_version,
       preemptible_tries = preemptible_tries,
       JsonTools = JsonTools,
-      batch_size = 30,
+      batch_size = batch_size,
       n_cpu = n_cpu
   }
 

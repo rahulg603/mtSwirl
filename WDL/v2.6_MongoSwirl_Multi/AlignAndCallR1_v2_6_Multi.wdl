@@ -50,6 +50,7 @@ workflow ParallelAlignAndCallR1 {
     #Optional runtime arguments
     Int? preemptible_tries
     Int? n_cpu
+    Int? batch_size
   }
 
   parameter_meta {
@@ -71,10 +72,10 @@ workflow ParallelAlignAndCallR1 {
         gatk_docker_override = gatk_docker_override,
         gatk_version = gatk_version, 
         hc_dp_lower_bound = hc_dp_lower_bound,
-        mem = 4,
         preemptible_tries = preemptible_tries,
         JsonTools = JsonTools,
-        n_cpu = n_cpu
+        n_cpu = n_cpu,
+        batch_size = batch_size
     }
   }
   if (!use_haplotype_caller_nucdna) {
