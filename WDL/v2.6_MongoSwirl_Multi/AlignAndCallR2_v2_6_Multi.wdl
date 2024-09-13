@@ -68,7 +68,7 @@ workflow ParallelAlignAndCallR2 {
     Int? preemptible_tries
     Int? n_cpu
     Int? n_cpu_bwa
-    Int? batch_size
+    Int batch_size
   }
 
   parameter_meta {

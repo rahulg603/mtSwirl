@@ -50,7 +50,7 @@ workflow ParallelAlignAndCallR1 {
     #Optional runtime arguments
     Int? preemptible_tries
     Int? n_cpu
-    Int? batch_size
+    Int batch_size
   }
 
   parameter_meta {
