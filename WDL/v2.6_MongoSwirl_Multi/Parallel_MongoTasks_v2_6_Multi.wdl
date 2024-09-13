@@ -28,6 +28,7 @@ task ParallelMongoSubsetBam {
     String gatk_version
     File JsonTools
 
+    Int batch_size
     Boolean force_manual_download
     Int? mem
     Int? n_cpu
@@ -37,10 +38,13 @@ task ParallelMongoSubsetBam {
   Float ref_size = if defined(ref_fasta) then size(ref_fasta, "GB") + size(ref_fasta_index, "GB") + size(ref_dict, "GB") else 0
   Int addl_size = ceil((55 * length(sample_name)) / 1000)
   Int disk_size = ceil(ref_size) + ceil(size(input_bam,'GB')) + 20 + addl_size
-  Int machine_mem = select_first([mem, 4])
+  # Int machine_mem = select_first([mem, 4])
   # adjusted so we dont OOM
   # gives ~55.3 GB max worst case, ~9gb per thread
-  Int command_mem = (machine_mem - 2) * 2048
+
+  # Int disk_size = 350
+  Int machine_mem = batch_size * 3
+  Int command_mem = 1024 * 3
   # overwrite this varaible for now, mem2_ssd1_v2_x16 cpu count
   Int nthreads = select_first([n_cpu, 1])-1
   String requester_pays_prefix = (if defined(requester_pays_project) then "-u " else "") + select_first([requester_pays_project, ""])
@@ -128,7 +132,7 @@ task ParallelMongoSubsetBam {
     
     # let's overwrite the n cpu by asking bash
     n_cpu_t=$(nproc)
-    seq 0 $((~{length(input_bam)}-1)) | xargs -n 1 -P 18 -I {} bash -c 'process_sample "$@"' _ {}
+    seq 0 $((~{length(input_bam)}-1)) | xargs -n 1 -P ~{batch_size} -I {} bash -c 'process_sample "$@"' _ {}
 
     # enforce ordering of json
     python <<EOF
@@ -143,11 +147,11 @@ task ParallelMongoSubsetBam {
   
   >>>
   runtime {
-    # memory: machine_mem + " GB"
-    # disks: "local-disk " + disk_size + " SSD"
+    memory: machine_mem + " GB"
+    disks: "local-disk " + disk_size + " SSD"
     docker: select_first([gatk_docker_override, "us.gcr.io/broad-gatk/gatk:"+gatk_version])
     # preemptible: select_first([preemptible_tries, 5])
-    # cpu: select_first([n_cpu, 1])
+    cpu: select_first([n_cpu, 1])
     dx_instance_type: "mem2_ssd1_v2_x16"
   }
   
@@ -185,16 +189,17 @@ task ParallelMongoProcessBamAndRevert {
     File JsonTools
 
     # runtime
-    Int? mem
+    Int? batch_size
     Int? n_cpu
     Int? preemptible_tries
   }
   Float ref_size = if defined(ref_fasta) then size(ref_fasta, "GB") + size(ref_fasta_index, "GB") + size(ref_dict, "GB") else 0
   Int disk_size = ceil(ref_size) + ceil(size(subset_bam,'GB')) + ceil(size(flagstat_pre_metrics,'GB')) + 20
   Int read_length_for_optimization = select_first([read_length, 151])
-  Int machine_mem = select_first([mem, 4])
-  # assumes machine_mem is 5, gives ~3gb per java vm or 55GB worst case
-  Int command_mem = (machine_mem - 2) * 2048
+
+  Int machine_mem = select_first([batch_size, 4]) * 2
+  Int command_mem = 1024 * 2
+
   String skip_hardclip_str = if skip_restore_hardclips then "--RESTORE_HARDCLIPS false" else ""
   Int nthreads = select_first([n_cpu,1])-1
 
@@ -345,7 +350,7 @@ task ParallelMongoProcessBamAndRevert {
     # let's overwrite the n cpu by asking bash
     n_cpu_t=$(nproc)
     echo "Processing bams across ~{d}{n_cpu_t} CPUs..."
-    seq 0 $((~{length(subset_bam)}-1)) | xargs -n 1 -P 18 -I {} bash -c 'process_sample_and_revert "$@"' _ {}
+    seq 0 $((~{length(subset_bam)}-1)) | xargs -n 1 -P ~{batch_size} -I {} bash -c 'process_sample_and_revert "$@"' _ {}
     # seq 0 $((~{length(subset_bam)}-1)) | xargs -n 1 -P ~{d}{n_cpu_t} -I {} bash -c 'process_sample_and_revert "$@"' _ {}
 
     echo "Finished processing BAMs, now producing output from json..."
@@ -366,12 +371,12 @@ task ParallelMongoProcessBamAndRevert {
   EOF
   >>>
   runtime {
-    # memory: machine_mem * 10 + " GB"
-    # disks: "local-disk " + disk_size + " SSD"
+    memory: machine_mem + " GB"
+    disks: "local-disk " + disk_size + " SSD"
     docker: select_first([gatk_docker_override, "us.gcr.io/broad-gatk/gatk:"+gatk_version])
-    # cpu: select_first([n_cpu, 1])
+    cpu: select_first([n_cpu, 1])
     #mem1_ssd1_v2_x2 works well but seems to be susceptible to spotinstance interruptions
-    dx_instance_type: "mem2_ssd1_v2_x16"
+    # dx_instance_type: "mem2_ssd1_v2_x16"
   }
   output {
     Object obj_out = read_json("out/jsonout.json")
@@ -416,14 +421,15 @@ task ParallelMongoHC {
 
     Int hc_dp_lower_bound
 
-    Int mem
+    Int? mem
+    Int? batch_size
     Int? preemptible_tries
     Int? n_cpu
   }
 
   # Mem is in units of GB but our command and memory runtime values are in MB
-  Int machine_mem = if defined(mem) then mem * 1000 else 3500
-  Int command_mem = machine_mem - 500
+  Int machine_mem = batch_size * 3
+  Int command_mem = 1024 * 3
 
   Float ref_size = size(ref_fasta, "GB") + size(ref_fai, "GB") + size(ref_dict, "GB")
   Int disk_size = ceil((size(input_bam, "GB") * 2) + ref_size) + 22
@@ -542,7 +548,7 @@ task ParallelMongoHC {
     export -f haplotype_caller_mt
     # let's overwrite the n cpu by asking bash
     n_cp_t=$(nproc)
-    seq 0 $((~{length(input_bam)}-1)) | xargs -n 1 -P 18 -I {} bash -c 'haplotype_caller_mt "$@"' _ {}
+    seq 0 $((~{length(input_bam)}-1)) | xargs -n 1 -P ~{batch_size} -I {} bash -c 'haplotype_caller_mt "$@"' _ {}
 
     # enforce ordering of json
     python <<EOF
@@ -559,10 +565,10 @@ task ParallelMongoHC {
   runtime {
     docker: select_first([gatk_docker_override, "us.gcr.io/broad-gatk/gatk:"+gatk_version])
     memory: machine_mem + " MB"
-    disks: "local-disk " + disk_size + " HDD"
+    # disks: "local-disk " + disk_size + " HDD"
     preemptible: select_first([preemptible_tries, 5])
     cpu: select_first([n_cpu,1])
-    dx_instance_type: "mem2_ssd1_v2_x8"
+    # dx_instance_type: "mem2_ssd1_v2_x8"
   }
   output {
     Object obj_out = read_json("out/jsonout.json")
@@ -613,6 +619,7 @@ task ParallelMongoAlignToMtRegShiftedAndMetrics {
     Int? read_length
     Int? coverage_cap
     Int? n_cpu
+    Int? batch_size
 
     Int? preemptible_tries
   }
@@ -625,7 +632,11 @@ task ParallelMongoAlignToMtRegShiftedAndMetrics {
 
   Int read_length_for_optimization = select_first([read_length, 151])
 
-  Int command_mem = 3 * 2048
+  Int command_mem = 1024 * 3 * 2
+
+  # num gigabytes
+  Int machine_mem = batch_size * 3 * 2
+
   String d = "$" # a stupid trick to get ${} indexing in bash to work in Cromwell
 
   meta {
@@ -865,7 +876,7 @@ task ParallelMongoAlignToMtRegShiftedAndMetrics {
     export -f align_to_mt_reg_shifted_metrics
     # let's overwrite the n cpu by asking bash
     n_cp_t=$(nproc)
-    seq 0 $((~{length(input_bam)}-1)) | xargs -n 1 -P 18 -I {} bash -c 'align_to_mt_reg_shifted_metrics "$@"' _ {}
+    seq 0 $((~{length(input_bam)}-1)) | xargs -n 1 -P ~{batch_size} -I {} bash -c 'align_to_mt_reg_shifted_metrics "$@"' _ {}
 
     # enforce ordering of json and compute maximum mean coverage
     python <<EOF
@@ -890,7 +901,9 @@ task ParallelMongoAlignToMtRegShiftedAndMetrics {
     # cpu: this_cpu
     # disks: "local-disk " + disk_size + " SSD"
     docker: "us.gcr.io/broad-gotc-prod/genomes-in-the-cloud:2.4.2-1552931386"
-    dx_instance_type: "mem2_ssd1_v2_x16"
+    cpu : this_cpu
+    memory : machine_mem
+    # dx_instance_type: "mem2_ssd1_v2_x16"
   }
   output {
     Object obj_out = read_json('out/jsonout.json')
@@ -948,7 +961,7 @@ task ParallelMongoCallMtAndShifted {
     String gatk_version
     String? gatk_docker_override
     File JsonTools
-    Int mem
+    Int batch_size
     Int? preemptible_tries
     Int? n_cpu
   }
@@ -958,8 +971,8 @@ task ParallelMongoCallMtAndShifted {
   Int disk_size = ceil(size(input_bam, "GB") + size(shifted_input_bam, "GB") + ref_size) + 20
 
   # Mem is in units of GB but our command and memory runtime values are in MB
-  Int machine_mem = if defined(mem) then mem * 1000 else 3500
-  Int command_mem = 1024
+  Int machine_mem = batch_size * 2
+  Int command_mem = 1024 * 2
 
   String d = "$" # a stupid trick to get ${} indexing in bash to work in Cromwell
 
@@ -1072,7 +1085,7 @@ task ParallelMongoCallMtAndShifted {
     export -f call_mt_and_shifted
     # n_cpu_t=$(nproc)
     echo "len of input bam: $((~{length(input_bam)}-1))"
-    seq 0 $((~{length(input_bam)}-1)) | xargs -n 1 -P 18 -I {} bash -c 'call_mt_and_shifted "$@"' _ {}
+    seq 0 $((~{length(input_bam)}-1)) | xargs -n 1 -P ~{batch_size} -I {} bash -c 'call_mt_and_shifted "$@"' _ {}
 
     # enforce ordering of json
     python <<EOF
@@ -1088,7 +1101,7 @@ task ParallelMongoCallMtAndShifted {
   runtime {
       docker: select_first([gatk_docker_override, "us.gcr.io/broad-gatk/gatk:"+gatk_version])
       memory: machine_mem + " MB"
-      disks: "local-disk " + disk_size + " HDD"
+      disks: "local-disk " + disk_size + " SSD"
       preemptible: select_first([preemptible_tries, 5])
       cpu: select_first([n_cpu,2])
   }

@@ -110,6 +110,7 @@ workflow MitochondriaPipeline {
       JsonTools = JsonTools,
       # overwrite here
       n_cpu = 16,
+      batch_size = 30,
       preemptible_tries = preemptible_tries
     }
 
@@ -133,6 +134,7 @@ workflow MitochondriaPipeline {
       coverage_cap = 100000,
       JsonTools = JsonTools,
       n_cpu = n_cpu_bwa,
+      batch_size = 30,
       preemptible_tries = preemptible_tries
   }
 
@@ -169,6 +171,7 @@ workflow MitochondriaPipeline {
       JsonTools = JsonTools,
       preemptible_tries = preemptible_tries,
       haplochecker_docker = haplochecker_docker,
+      batch_size = 30,
       n_cpu = n_cpu_m2_hc_lift
   }
 
@@ -251,6 +254,7 @@ workflow MitochondriaPipeline {
       JsonTools = JsonTools,
       preemptible_tries = preemptible_tries,
       n_cpu_bwa = n_cpu_bwa,
+      batch_size = 30,
       n_cpu = n_cpu_m2_hc_lift
   }
 
