@@ -141,7 +141,6 @@ workflow ParallelAlignAndCallR2 {
       gatk_override = gatk_override,
       gatk_docker_override = gatk_docker_override,
       gatk_version = gatk_version,
-      mem = M2_mem,
       preemptible_tries = preemptible_tries,
       JsonTools = JsonTools,
       batch_size = 30,
