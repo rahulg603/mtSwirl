@@ -428,7 +428,7 @@ task ParallelMongoHC {
   }
 
   # Mem is in units of GB but our command and memory runtime values are in MB
-  Int machine_mem = batch_size * 3
+  Int machine_mem = batch_size * 1 * 3 + 32
   Int command_mem = 1024 * 3
 
   Float ref_size = size(ref_fasta, "GB") + size(ref_fai, "GB") + size(ref_dict, "GB")
