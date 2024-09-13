@@ -105,7 +105,7 @@ workflow ParallelAlignAndCallR2 {
       
       preemptible_tries = preemptible_tries,
       JsonTools = JsonTools,
-      n_cpu = 16,
+      n_cpu = n_cpu_bwa,
       batch_size = batch_size
   }
 
