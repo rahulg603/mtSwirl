@@ -189,7 +189,7 @@ task ParallelMongoProcessBamAndRevert {
     File JsonTools
 
     # runtime
-    Int? batch_size
+    Int batch_size
     Int? n_cpu
     Int? preemptible_tries
   }
@@ -422,7 +422,7 @@ task ParallelMongoHC {
     Int hc_dp_lower_bound
 
     Int? mem
-    Int? batch_size
+    Int batch_size
     Int? preemptible_tries
     Int? n_cpu
   }
@@ -619,7 +619,7 @@ task ParallelMongoAlignToMtRegShiftedAndMetrics {
     Int? read_length
     Int? coverage_cap
     Int? n_cpu
-    Int? batch_size
+    Int batch_size
 
     Int? preemptible_tries
   }
