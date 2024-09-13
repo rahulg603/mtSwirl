@@ -43,7 +43,7 @@ task ParallelMongoSubsetBam {
   # gives ~55.3 GB max worst case, ~9gb per thread
 
   # Int disk_size = 350
-  Int machine_mem = batch_size * 3
+  Int machine_mem = batch_size * 3 + 16
   Int command_mem = 1024 * 3
   # overwrite this varaible for now, mem2_ssd1_v2_x16 cpu count
   Int nthreads = select_first([n_cpu, 1])-1
@@ -635,7 +635,7 @@ task ParallelMongoAlignToMtRegShiftedAndMetrics {
   Int command_mem = 1024 * 3 * 2
 
   # num gigabytes
-  Int machine_mem = batch_size * 3 * 2
+  Int machine_mem = batch_size * 3 * 2 + 16
 
   String d = "$" # a stupid trick to get ${} indexing in bash to work in Cromwell
 
@@ -971,7 +971,7 @@ task ParallelMongoCallMtAndShifted {
   Int disk_size = ceil(size(input_bam, "GB") + size(shifted_input_bam, "GB") + ref_size) + 20
 
   # Mem is in units of GB but our command and memory runtime values are in MB
-  Int machine_mem = batch_size * 2
+  Int machine_mem = batch_size * 2 + 32
   Int command_mem = 1024 * 2
 
   String d = "$" # a stupid trick to get ${} indexing in bash to work in Cromwell
