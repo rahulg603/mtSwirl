@@ -105,7 +105,8 @@ workflow ParallelAlignAndCallR2 {
       
       preemptible_tries = preemptible_tries,
       JsonTools = JsonTools,
-      n_cpu = 16
+      n_cpu = 16,
+      batch_size = batch_size
   }
 
   Int M2_mem = if AlignToMtRegShiftedAndMetrics.max_mean_coverage > 25000 then 14 else 7

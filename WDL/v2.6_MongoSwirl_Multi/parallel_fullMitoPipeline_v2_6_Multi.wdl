@@ -70,6 +70,7 @@ workflow MitochondriaPipeline {
     String genomes_cloud_docker
     String haplochecker_docker
     String gatk_samtools_docker
+    Int batch_size
 
     #Optional runtime arguments
     Int? printreads_mem
@@ -110,7 +111,7 @@ workflow MitochondriaPipeline {
       JsonTools = JsonTools,
       # overwrite here
       n_cpu = 16,
-      batch_size = 30,
+      batch_size = batch_size,
       preemptible_tries = preemptible_tries
     }
 
@@ -134,7 +135,7 @@ workflow MitochondriaPipeline {
       coverage_cap = 100000,
       JsonTools = JsonTools,
       n_cpu = n_cpu_bwa,
-      batch_size = 30,
+      batch_size = batch_size,
       preemptible_tries = preemptible_tries
   }
 
@@ -171,7 +172,7 @@ workflow MitochondriaPipeline {
       JsonTools = JsonTools,
       preemptible_tries = preemptible_tries,
       haplochecker_docker = haplochecker_docker,
-      batch_size = 30,
+      batch_size = batch_size,
       n_cpu = n_cpu_m2_hc_lift
   }
 
@@ -254,7 +255,7 @@ workflow MitochondriaPipeline {
       JsonTools = JsonTools,
       preemptible_tries = preemptible_tries,
       n_cpu_bwa = n_cpu_bwa,
-      batch_size = 30,
+      batch_size = batch_size,
       n_cpu = n_cpu_m2_hc_lift
   }
 
@@ -567,7 +568,7 @@ task NucCoverageAtEveryBase {
     done
   >>>
   runtime {
-    disks: "local-disk " + disk_size + " HDD"
+    disks: "local-disk " + disk_size + " SSD"
     memory: "2000 MB"
     docker: "us.gcr.io/broad-gotc-prod/genomes-in-the-cloud:2.4.2-1552931386"
     preemptible: select_first([preemptible_tries, 5])
@@ -604,7 +605,7 @@ task TransposeTable {
   }
 
   runtime {
-    disks: "local-disk 10 HDD"
+    disks: "local-disk 10 SSD"
     memory: "1 GB"
     docker: genomes_cloud_docker
     preemptible: 5
@@ -708,7 +709,7 @@ task MergeMitoMultiSampleOutputs {
   }
 
   runtime {
-    disks: "local-disk " + disk_size + " HDD"
+    disks: "local-disk " + disk_size + " SSD"
     memory: "2 GB"
     docker: genomes_cloud_docker
     preemptible: select_first([preemptible_tries, 5])
@@ -775,7 +776,7 @@ task ExtractProduceSelfRefOutputs {
   runtime {
     preemptible: select_first([preemptible_tries, 5])
     memory: "1 GB"
-    disks: "local-disk " + disk_size + " HDD"
+    disks: "local-disk " + disk_size + " SSD"
     docker: haplochecker_docker
   }
 }
