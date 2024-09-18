@@ -197,8 +197,8 @@ task ParallelMongoProcessBamAndRevert {
   Int disk_size = ceil(ref_size) + ceil(size(subset_bam,'GB')) + ceil(size(flagstat_pre_metrics,'GB')) + 20
   Int read_length_for_optimization = select_first([read_length, 151])
 
-  Int machine_mem = select_first([batch_size, 4]) * 2
-  Int command_mem = 1024 * 2
+  Int machine_mem = ceil(select_first([batch_size, 4]) * 1.5) + 4
+  Int command_mem = (1024 * 1.5)
 
   String skip_hardclip_str = if skip_restore_hardclips then "--RESTORE_HARDCLIPS false" else ""
   Int nthreads = select_first([n_cpu,1])-1
@@ -428,8 +428,8 @@ task ParallelMongoHC {
   }
 
   # Mem is in units of GB but our command and memory runtime values are in MB
-  Int machine_mem = batch_size * 1 * 3 + 32
-  Int command_mem = 1024 * 3
+  Int machine_mem = batch_size * 1 * 2 + 4
+  Int command_mem = 1024 * 2
 
   Float ref_size = size(ref_fasta, "GB") + size(ref_fai, "GB") + size(ref_dict, "GB")
   Int disk_size = ceil((size(input_bam, "GB") * 2) + ref_size) + 22
@@ -632,10 +632,10 @@ task ParallelMongoAlignToMtRegShiftedAndMetrics {
 
   Int read_length_for_optimization = select_first([read_length, 151])
 
-  Int command_mem = 1024 * 3 * 2
+  Int command_mem = 1024 * 3
 
   # num gigabytes
-  Int machine_mem = batch_size * 3 * 2 + 16
+  Int machine_mem = batch_size * 3 + 4
 
   String d = "$" # a stupid trick to get ${} indexing in bash to work in Cromwell
 
@@ -688,7 +688,7 @@ task ParallelMongoAlignToMtRegShiftedAndMetrics {
       /usr/gitc/bwa index "~{d}{this_mt_cat_fasta}"
       local bash_ref_fasta="~{d}{this_mt_cat_fasta}"
 
-      java -Xms3072m "-Xmx~{command_mem}m" -jar /usr/gitc/picard.jar \
+      java "-Xms~{command_mem}m" "-Xmx~{command_mem}m" -jar /usr/gitc/picard.jar \
         SamToFastq \
         INPUT="~{d}{this_bam}" \
         FASTQ="~{d}{this_sample_fastq}" \
@@ -699,7 +699,7 @@ task ParallelMongoAlignToMtRegShiftedAndMetrics {
 
       ls out/*.aligned.bam
       
-      java -Xms3072m "-Xmx~{command_mem}m" -jar /usr/gitc/picard.jar \
+      java "-Xms~{command_mem}m" "-Xmx~{command_mem}m" -jar /usr/gitc/picard.jar \
         MergeBamAlignment \
         VALIDATION_STRINGENCY=SILENT \
         EXPECTED_ORIENTATIONS=FR \
@@ -728,7 +728,7 @@ task ParallelMongoAlignToMtRegShiftedAndMetrics {
         UNMAP_CONTAMINANT_READS=true \
         ADD_PG_TAG_TO_READS=false
 
-      java -Xms3072m "-Xmx~{command_mem}m" -jar /usr/gitc/picard.jar \
+      java "-Xms~{command_mem}m" "-Xmx~{command_mem}m" -jar /usr/gitc/picard.jar \
         MarkDuplicates \
         INPUT="~{d}{this_sample_suff}.mba.bam" \
         OUTPUT="~{d}{this_sample_suff}.md.bam" \
@@ -742,7 +742,7 @@ task ParallelMongoAlignToMtRegShiftedAndMetrics {
       echo "md BAM files:"
       ls out/*.md.bam
 
-      java -Xms3072m "-Xmx~{command_mem}m" -jar /usr/gitc/picard.jar \
+      java "-Xms~{command_mem}m" "-Xmx~{command_mem}m" -jar /usr/gitc/picard.jar \
         SortSam \
         INPUT="~{d}{this_sample_suff}.md.bam" \
         OUTPUT="~{d}{this_output_bam_basename}_pre_mt_filt.bam" \
@@ -753,7 +753,7 @@ task ParallelMongoAlignToMtRegShiftedAndMetrics {
       echo "md_filt BAM files:"
       ls out/*_pre_mt_filt.bam
       # now we have to subset to mito and update sequence dictionary
-      java -Xms3072m "-Xmx~{command_mem}m" -jar /usr/gitc/picard.jar \
+      java "-Xms~{command_mem}m" "-Xmx~{command_mem}m" -jar /usr/gitc/picard.jar \
         ReorderSam \
         I="~{d}{this_output_bam_basename}_pre_mt_filt.bam" \
         O="~{d}{this_output_bam_basename}.bam" \
@@ -765,7 +765,7 @@ task ParallelMongoAlignToMtRegShiftedAndMetrics {
       # set the bash variable needed for the command-line
       /usr/gitc/bwa index "~{d}{this_mt_shifted_cat_fasta}"
       local bash_ref_fasta="~{d}{this_mt_shifted_cat_fasta}"
-      java -Xms3072m "-Xmx~{command_mem}m" -jar /usr/gitc/picard.jar \
+      java "-Xms~{command_mem}m" "-Xmx~{command_mem}m" -jar /usr/gitc/picard.jar \
         SamToFastq \
         INPUT="~{d}{this_bam}" \
         FASTQ="~{d}{this_sample_fastq_shifted}" \
@@ -774,7 +774,7 @@ task ParallelMongoAlignToMtRegShiftedAndMetrics {
 
       /usr/gitc/~{this_bwa_commandline} "~{d}{this_sample_fastq_shifted}" - 2> >(tee "~{d}{this_output_bam_basename}.shifted.bwa.stderr.log" >&2) > "~{d}{this_sample_bam_aligned_shifted}"
 
-      java -Xms3072m "-Xmx~{command_mem}m" -jar /usr/gitc/picard.jar \
+      java "-Xms~{command_mem}m" "-Xmx~{command_mem}m" -jar /usr/gitc/picard.jar \
         MergeBamAlignment \
         VALIDATION_STRINGENCY=SILENT \
         EXPECTED_ORIENTATIONS=FR \
@@ -803,7 +803,7 @@ task ParallelMongoAlignToMtRegShiftedAndMetrics {
         UNMAP_CONTAMINANT_READS=true \
         ADD_PG_TAG_TO_READS=false
 
-      java -Xms3072m "-Xmx~{command_mem}m" -jar /usr/gitc/picard.jar \
+      java "-Xms~{command_mem}m" "-Xmx~{command_mem}m" -jar /usr/gitc/picard.jar \
         MarkDuplicates \
         INPUT="~{d}{this_sample_suff}.mba.shifted.bam" \
         OUTPUT="~{d}{this_sample_suff}.md.shifted.bam" \
@@ -815,7 +815,7 @@ task ParallelMongoAlignToMtRegShiftedAndMetrics {
         CLEAR_DT="false" \
         ADD_PG_TAG_TO_READS=false
 
-      java -Xms3072m "-Xmx~{command_mem}m" -jar /usr/gitc/picard.jar \
+      java "-Xms~{command_mem}m" "-Xmx~{command_mem}m" -jar /usr/gitc/picard.jar \
         SortSam \
         INPUT="~{d}{this_sample_suff}.md.shifted.bam" \
         OUTPUT="~{d}{this_output_bam_basename}.shifted_pre_mt_filt.bam" \
@@ -824,7 +824,7 @@ task ParallelMongoAlignToMtRegShiftedAndMetrics {
         MAX_RECORDS_IN_RAM=300000
 
       # now we have to subset to mito and update sequence dictionary
-      java -Xms3072m "-Xmx~{command_mem}m" -jar /usr/gitc/picard.jar \
+      java "-Xms~{command_mem}m" "-Xmx~{command_mem}m" -jar /usr/gitc/picard.jar \
         ReorderSam \
         I="~{d}{this_output_bam_basename}.shifted_pre_mt_filt.bam" \
         O="~{d}{this_output_bam_basename}.shifted.bam" \
@@ -833,7 +833,7 @@ task ParallelMongoAlignToMtRegShiftedAndMetrics {
         CREATE_INDEX=true
 
       echo "Now collecting wgs metrics..."
-      java -Xms3072m "-Xmx~{command_mem}m" -jar /usr/gitc/picard.jar \
+      java "-Xms~{command_mem}m" "-Xmx~{command_mem}m" -jar /usr/gitc/picard.jar \
         CollectWgsMetrics \
         INPUT="~{d}{this_output_bam_basename}.bam" \
         INTERVALS="~{d}{this_mt_intervals}" \
@@ -971,8 +971,8 @@ task ParallelMongoCallMtAndShifted {
   Int disk_size = ceil(size(input_bam, "GB") + size(shifted_input_bam, "GB") + ref_size) + 20
 
   # Mem is in units of GB but our command and memory runtime values are in MB
-  Int machine_mem = batch_size * 2 + 32
-  Int command_mem = 1024 * 2
+  Int machine_mem = ceil(batch_size * 0.25) + 2
+  Int command_mem = ceil(1024 * 0.25)
 
   String d = "$" # a stupid trick to get ${} indexing in bash to work in Cromwell
 
