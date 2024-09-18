@@ -43,8 +43,8 @@ task ParallelMongoSubsetBam {
   # gives ~55.3 GB max worst case, ~9gb per thread
 
   # Int disk_size = 350
-  Int machine_mem = batch_size * 3 + 16
-  Int command_mem = 1024 * 3
+  Int machine_mem = select_first([mem, ceil(batch_size * 1.5)])
+  Int command_mem = 1024
   # overwrite this varaible for now, mem2_ssd1_v2_x16 cpu count
   Int nthreads = select_first([n_cpu, 1])-1
   String requester_pays_prefix = (if defined(requester_pays_project) then "-u " else "") + select_first([requester_pays_project, ""])
@@ -564,7 +564,7 @@ task ParallelMongoHC {
 
   runtime {
     docker: select_first([gatk_docker_override, "us.gcr.io/broad-gatk/gatk:"+gatk_version])
-    memory: machine_mem + " MB"
+    memory: machine_mem + " GB"
     # disks: "local-disk " + disk_size + " HDD"
     preemptible: select_first([preemptible_tries, 5])
     cpu: select_first([n_cpu,1])
@@ -902,7 +902,7 @@ task ParallelMongoAlignToMtRegShiftedAndMetrics {
     # disks: "local-disk " + disk_size + " SSD"
     docker: "us.gcr.io/broad-gotc-prod/genomes-in-the-cloud:2.4.2-1552931386"
     cpu : this_cpu
-    memory : machine_mem
+    memory : machine_mem + " GB"
     # dx_instance_type: "mem2_ssd1_v2_x16"
   }
   output {

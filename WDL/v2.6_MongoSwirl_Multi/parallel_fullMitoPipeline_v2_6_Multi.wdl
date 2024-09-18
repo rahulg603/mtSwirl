@@ -110,7 +110,7 @@ workflow MitochondriaPipeline {
       mem = printreads_mem,
       JsonTools = JsonTools,
       # overwrite here
-      n_cpu = 16,
+      n_cpu = n_cpu_subsetbam,
       batch_size = batch_size,
       preemptible_tries = preemptible_tries
     }
