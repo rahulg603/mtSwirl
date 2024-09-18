@@ -106,6 +106,12 @@ task ParallelMongoSubsetBam {
           -I "~{d}{this_bam}" --read-index "~{d}{this_bai}" \
           -O "~{d}{this_sample}.bam"
           
+        cpu_usage=$(top -bn1 | grep "Cpu(s)" | awk '{print $2 + $4}')
+        mem_total=$(free | grep Mem | awk '{print $2}')
+        mem_used=$(free | grep Mem | awk '{print $3}')
+        mem_usage=$(echo "scale=2; ~{d}mem_used/~{d}mem_total*100" | bc)
+        echo "top output: CPU Usage: ~{d}cpu_usage%"
+        echo "top output: Memory Usage: ~{d}mem_usage%"
         echo "~{d}{this_sample_t}: completed gatk. Writing to json output."
           {
             flock 200
@@ -315,6 +321,13 @@ task ParallelMongoProcessBamAndRevert {
         CLEAR_DT="false" \
         ADD_PG_TAG_TO_READS=false
 
+        cpu_usage=$(top -bn1 | grep "Cpu(s)" | awk '{print $2 + $4}')
+        mem_total=$(free | grep Mem | awk '{print $2}')
+        mem_used=$(free | grep Mem | awk '{print $3}')
+        mem_usage=$(echo "scale=2; ~{d}mem_used/~{d}mem_total*100" | bc)
+        echo "top output: CPU Usage: ~{d}cpu_usage%"
+        echo "top output: Memory Usage: ~{d}mem_usage%"
+
       echo "Now sorting md.bam for ~{d}{this_sample_t}"
       gatk --java-options "-Xmx~{command_mem}m" SortSam \
         INPUT="~{d}{this_sample_t}.md.bam" \
@@ -505,7 +518,12 @@ task ParallelMongoHC {
         ~{'--genotype-filter-expression "DP < ' + hc_dp_lower_bound + '" --genotype-filter-name "genoDP' + hc_dp_lower_bound + '"'}
 
       gatk --java-options "-Xmx~{command_mem}m" MergeVcfs -I "~{d}{this_sample_suff}.snps_filtered.vcf" -I "~{d}{this_sample_suff}.indels_filtered.vcf" -O "~{d}{this_basename}.vcf"
-
+      cpu_usage=$(top -bn1 | grep "Cpu(s)" | awk '{print $2 + $4}')
+      mem_total=$(free | grep Mem | awk '{print $2}')
+      mem_used=$(free | grep Mem | awk '{print $3}')
+      mem_usage=$(echo "scale=2; ~{d}mem_used/~{d}mem_total*100" | bc)
+      echo "top output: CPU Usage: ~{d}cpu_usage%"
+      echo "top output: Memory Usage: ~{d}mem_usage%"
       echo "Now filtering VCF..."
       gatk --java-options "-Xmx~{command_mem}m" SelectVariants \
         -V "~{d}{this_basename}.vcf" \
@@ -771,6 +789,13 @@ task ParallelMongoAlignToMtRegShiftedAndMetrics {
         FASTQ="~{d}{this_sample_fastq_shifted}" \
         INTERLEAVE=true \
         NON_PF=true
+
+      cpu_usage=$(top -bn1 | grep "Cpu(s)" | awk '{print $2 + $4}')
+      mem_total=$(free | grep Mem | awk '{print $2}')
+      mem_used=$(free | grep Mem | awk '{print $3}')
+      mem_usage=$(echo "scale=2; ~{d}mem_used/~{d}mem_total*100" | bc)
+      echo "top output: CPU Usage: ~{d}cpu_usage%"
+      echo "top output: Memory Usage: ~{d}mem_usage%"
 
       /usr/gitc/~{this_bwa_commandline} "~{d}{this_sample_fastq_shifted}" - 2> >(tee "~{d}{this_output_bam_basename}.shifted.bwa.stderr.log" >&2) > "~{d}{this_sample_bam_aligned_shifted}"
 
@@ -1050,6 +1075,13 @@ task ParallelMongoCallMtAndShifted {
       # Fix for DNANexus weirdness
       gatk IndexFeatureFile -I "~{d}{this_shifted_force_vcf}"
 
+      cpu_usage=$(top -bn1 | grep "Cpu(s)" | awk '{print $2 + $4}')
+      mem_total=$(free | grep Mem | awk '{print $2}')
+      mem_used=$(free | grep Mem | awk '{print $3}')
+      mem_usage=$(echo "scale=2; ~{d}mem_used/~{d}mem_total*100" | bc)
+      echo "top output: CPU Usage: ~{d}cpu_usage%"
+      echo "top output: Memory Usage: ~{d}mem_usage%"
+      
       gatk --java-options "-Xmx~{command_mem}m" Mutect2 \
         -R "~{d}{this_self_shifted_fasta}" \
         -I "~{d}{this_shifted_bam}" \
