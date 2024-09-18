@@ -204,7 +204,7 @@ task ParallelMongoProcessBamAndRevert {
   Int read_length_for_optimization = select_first([read_length, 151])
 
   Int machine_mem = ceil(select_first([batch_size, 4]) * 1.5) + 4
-  Int command_mem = (1024 * 1.5)
+  Int command_mem = ceil(1024 * 1.5)
 
   String skip_hardclip_str = if skip_restore_hardclips then "--RESTORE_HARDCLIPS false" else ""
   Int nthreads = select_first([n_cpu,1])-1
@@ -1081,7 +1081,7 @@ task ParallelMongoCallMtAndShifted {
       mem_usage=$(echo "scale=2; ~{d}mem_used/~{d}mem_total*100" | bc)
       echo "top output: CPU Usage: ~{d}cpu_usage%"
       echo "top output: Memory Usage: ~{d}mem_usage%"
-      
+
       gatk --java-options "-Xmx~{command_mem}m" Mutect2 \
         -R "~{d}{this_self_shifted_fasta}" \
         -I "~{d}{this_shifted_bam}" \
