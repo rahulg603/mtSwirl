@@ -50,6 +50,7 @@ workflow ParallelAlignAndCallR1 {
     #Optional runtime arguments
     Int? preemptible_tries
     Int? n_cpu
+    Int? n_cpu_serial
     Int batch_size
   }
 
@@ -137,7 +138,7 @@ workflow ParallelAlignAndCallR1 {
       mem = M2_mem,
       preemptible_tries = preemptible_tries,
       JsonTools = JsonTools,
-      n_cpu = 8
+      n_cpu = n_cpu_serial
   }
 
   call GetContamination {

@@ -78,6 +78,8 @@ workflow MitochondriaPipeline {
     Int? n_cpu_subsetbam
     Int? n_cpu_m2_hc_lift
     Int? n_cpu_bwa
+    Int? n_cpu_m2_serial
+    Int? n_cpu_liftover
     Int? preemptible_tries
   }
 
@@ -173,7 +175,8 @@ workflow MitochondriaPipeline {
       preemptible_tries = preemptible_tries,
       haplochecker_docker = haplochecker_docker,
       batch_size = batch_size,
-      n_cpu = n_cpu_m2_hc_lift
+      n_cpu = n_cpu_m2_hc_lift,
+      n_cpu_serial = 8
   }
 
   call ProduceSelfReferenceFiles_Multi.ProduceSelfReferenceFiles as ProduceSelfRefFiles {
@@ -290,7 +293,7 @@ workflow MitochondriaPipeline {
       JsonTools = JsonTools,
       self_suffix = self_ref_suffix,
 
-      n_cpu = n_cpu_m2_hc_lift,
+      n_cpu = 4,
       genomes_cloud_docker = genomes_cloud_docker,
       preemptible_tries = preemptible_tries
   }
