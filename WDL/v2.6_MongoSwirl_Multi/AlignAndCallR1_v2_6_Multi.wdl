@@ -137,7 +137,7 @@ workflow ParallelAlignAndCallR1 {
       mem = M2_mem,
       preemptible_tries = preemptible_tries,
       JsonTools = JsonTools,
-      n_cpu = n_cpu
+      n_cpu = 8
   }
 
   call GetContamination {
