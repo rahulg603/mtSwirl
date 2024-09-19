@@ -43,8 +43,8 @@ task ParallelMongoSubsetBam {
   # gives ~55.3 GB max worst case, ~9gb per thread
 
   # Int disk_size = 350
-  Int machine_mem = select_first([mem, ceil(batch_size * 1.5)])
-  Int command_mem = 1024
+  Int machine_mem = select_first([mem, ceil(batch_size * 1.5) + 4])
+  Int command_mem = ceil(1024 * 1.5)
   # overwrite this varaible for now, mem2_ssd1_v2_x16 cpu count
   Int nthreads = select_first([n_cpu, 1])-1
   String requester_pays_prefix = (if defined(requester_pays_project) then "-u " else "") + select_first([requester_pays_project, ""])
@@ -105,13 +105,15 @@ task ParallelMongoSubsetBam {
           ~{"--gcs-project-for-requester-pays " + requester_pays_project} \
           -I "~{d}{this_bam}" --read-index "~{d}{this_bai}" \
           -O "~{d}{this_sample}.bam"
-          
+        
+        # profiling
         cpu_usage=$(top -bn1 | grep "Cpu(s)" | awk '{print $2 + $4}')
         mem_total=$(free | grep Mem | awk '{print $2}')
         mem_used=$(free | grep Mem | awk '{print $3}')
         mem_usage=$(echo "scale=2; ~{d}mem_used/~{d}mem_total*100" | bc)
         echo "top output: CPU Usage: ~{d}cpu_usage%"
         echo "top output: Memory Usage: ~{d}mem_usage%"
+
         echo "~{d}{this_sample_t}: completed gatk. Writing to json output."
           {
             flock 200
@@ -321,12 +323,13 @@ task ParallelMongoProcessBamAndRevert {
         CLEAR_DT="false" \
         ADD_PG_TAG_TO_READS=false
 
-        cpu_usage=$(top -bn1 | grep "Cpu(s)" | awk '{print $2 + $4}')
-        mem_total=$(free | grep Mem | awk '{print $2}')
-        mem_used=$(free | grep Mem | awk '{print $3}')
-        mem_usage=$(echo "scale=2; ~{d}mem_used/~{d}mem_total*100" | bc)
-        echo "top output: CPU Usage: ~{d}cpu_usage%"
-        echo "top output: Memory Usage: ~{d}mem_usage%"
+      # profiling
+      cpu_usage=$(top -bn1 | grep "Cpu(s)" | awk '{print $2 + $4}')
+      mem_total=$(free | grep Mem | awk '{print $2}')
+      mem_used=$(free | grep Mem | awk '{print $3}')
+      mem_usage=$(echo "scale=2; ~{d}mem_used/~{d}mem_total*100" | bc)
+      echo "top output: CPU Usage: ~{d}cpu_usage%"
+      echo "top output: Memory Usage: ~{d}mem_usage%"
 
       echo "Now sorting md.bam for ~{d}{this_sample_t}"
       gatk --java-options "-Xmx~{command_mem}m" SortSam \
@@ -518,12 +521,15 @@ task ParallelMongoHC {
         ~{'--genotype-filter-expression "DP < ' + hc_dp_lower_bound + '" --genotype-filter-name "genoDP' + hc_dp_lower_bound + '"'}
 
       gatk --java-options "-Xmx~{command_mem}m" MergeVcfs -I "~{d}{this_sample_suff}.snps_filtered.vcf" -I "~{d}{this_sample_suff}.indels_filtered.vcf" -O "~{d}{this_basename}.vcf"
+
+      # profiling
       cpu_usage=$(top -bn1 | grep "Cpu(s)" | awk '{print $2 + $4}')
       mem_total=$(free | grep Mem | awk '{print $2}')
       mem_used=$(free | grep Mem | awk '{print $3}')
       mem_usage=$(echo "scale=2; ~{d}mem_used/~{d}mem_total*100" | bc)
       echo "top output: CPU Usage: ~{d}cpu_usage%"
       echo "top output: Memory Usage: ~{d}mem_usage%"
+
       echo "Now filtering VCF..."
       gatk --java-options "-Xmx~{command_mem}m" SelectVariants \
         -V "~{d}{this_basename}.vcf" \
@@ -790,6 +796,7 @@ task ParallelMongoAlignToMtRegShiftedAndMetrics {
         INTERLEAVE=true \
         NON_PF=true
 
+      # profiling
       cpu_usage=$(top -bn1 | grep "Cpu(s)" | awk '{print $2 + $4}')
       mem_total=$(free | grep Mem | awk '{print $2}')
       mem_used=$(free | grep Mem | awk '{print $3}')
@@ -1075,6 +1082,7 @@ task ParallelMongoCallMtAndShifted {
       # Fix for DNANexus weirdness
       gatk IndexFeatureFile -I "~{d}{this_shifted_force_vcf}"
 
+      # profiling
       cpu_usage=$(top -bn1 | grep "Cpu(s)" | awk '{print $2 + $4}')
       mem_total=$(free | grep Mem | awk '{print $2}')
       mem_used=$(free | grep Mem | awk '{print $3}')
@@ -1132,7 +1140,7 @@ task ParallelMongoCallMtAndShifted {
   >>>
   runtime {
       docker: select_first([gatk_docker_override, "us.gcr.io/broad-gatk/gatk:"+gatk_version])
-      memory: machine_mem + " MB"
+      memory: machine_mem + " GB"
       disks: "local-disk " + disk_size + " SSD"
       preemptible: select_first([preemptible_tries, 5])
       cpu: select_first([n_cpu,2])
