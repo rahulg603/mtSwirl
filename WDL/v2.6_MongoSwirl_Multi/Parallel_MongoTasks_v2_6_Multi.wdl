@@ -847,6 +847,14 @@ task ParallelMongoAlignToMtRegShiftedAndMetrics {
         CLEAR_DT="false" \
         ADD_PG_TAG_TO_READS=false
 
+      # profiling
+      cpu_usage=$(top -bn1 | grep "Cpu(s)" | awk '{print $2 + $4}')
+      mem_total=$(free | grep Mem | awk '{print $2}')
+      mem_used=$(free | grep Mem | awk '{print $3}')
+      mem_usage=$(echo "scale=2; ~{d}mem_used/~{d}mem_total*100" | bc)
+      echo "top output: CPU Usage: ~{d}cpu_usage%"
+      echo "top output: Memory Usage: ~{d}mem_usage%"
+
       java "-Xms~{command_mem}m" "-Xmx~{command_mem}m" -jar /usr/gitc/picard.jar \
         SortSam \
         INPUT="~{d}{this_sample_suff}.md.shifted.bam" \
