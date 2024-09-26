@@ -1011,8 +1011,8 @@ task ParallelMongoCallMtAndShifted {
   Int disk_size = ceil(size(input_bam, "GB") + size(shifted_input_bam, "GB") + ref_size) + 20
 
   # Mem is in units of GB but our command and memory runtime values are in MB
-  Int machine_mem = ceil(batch_size * 0.25) + 2
-  Int command_mem = ceil(1024 * 0.25)
+  Int machine_mem = ceil(batch_size * 1) + 2
+  Int command_mem = ceil(1024 * 1)
 
   String d = "$" # a stupid trick to get ${} indexing in bash to work in Cromwell
 
