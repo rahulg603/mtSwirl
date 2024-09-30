@@ -194,7 +194,8 @@ def join_mitochondria_vcfs_into_mt(
                 # Second value of MMQ is the value of the mapping quality for the alternate allele
                 # Add FT annotation for sample genotype filters (pull these from filters annotations of the single-sample VCFs)
                 if include_extra_v2_fields:
-                    fields_of_interest = {'OriginalSelfRefAlleles':'array<str>', 'SwappedFieldIDs':'str'}
+                    fields_of_interest = {'OriginalSelfRefAlleles':'array<str>', 'SwappedFieldIDs':'str',
+                                          'F2R1':'array<int32>', 'F1R2':'array<int32>'}
                     if 'GT' in mt.entry:
                         mt = mt.drop('GT')
                     for x, item_type in fields_of_interest.items():
@@ -202,6 +203,8 @@ def join_mitochondria_vcfs_into_mt(
                             mt = mt.annotate_entries(**{x: hl.missing(item_type)})
                     mt = mt.select_entries("DP", "AD", *list(fields_of_interest.keys()), "HL", "MQ", "TLOD", "FT")
                     META_DICT['format'].update({'AD': {"Description": "Allelic depth of REF and ALT", "Number": "R", "Type": "Integer"},
+                                                'F2R1': {"Description": "Count of reads in F2R1 pair orientation supporting each allele", "Number": "R", "Type": "Integer"},
+                                                'F1R2': {"Description": "Count of reads in F1R2 pair orientation supporting each allele", "Number": "R", "Type": "Integer"},
                                                 'OriginalSelfRefAlleles': {'Description':'Original self-reference alleles (only if alleles were changed in Liftover repair pipeline)', 'Number':'R', 'Type':'String'},
                                                 'SwappedFieldIDs': {'Description':'Fields remapped during liftover (only if alleles were changed in Liftover repair pipeline)', 'Number':'1', 'Type':'String'}})
                 else:
