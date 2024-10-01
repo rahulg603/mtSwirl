@@ -1213,8 +1213,8 @@ task ParallelMongoLiftoverVCFAndGetCoverage {
   Int disk_size = ceil(bam_size) + ceil(size(r2_self_ref_vcf, "GB") + ref_size) *2 + 20
   String d = "$" # a stupid trick to get ${} indexing in bash to work in Cromwell
 
-  Int adjusted_ncpu = ceil(n_cpu/2)
-  Int adjusted_batch_size = ceil(batch_size/2)
+  Int adjusted_ncpu = ceil(n_cpu * 0.5)
+  Int adjusted_batch_size = ceil(batch_size * 0.5)
   Int n_threads_run = select_first([adjusted_ncpu, adjusted_batch_size])
 
   command <<<
