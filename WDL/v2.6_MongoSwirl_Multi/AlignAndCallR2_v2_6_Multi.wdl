@@ -111,7 +111,7 @@ workflow ParallelAlignAndCallR2 {
 
   Int M2_mem = if AlignToMtRegShiftedAndMetrics.max_mean_coverage > 25000 then 14 else 7
 
-  call ParallelMongoTasks_Multi.ParallelMongoCallMtAndShifted as CallMtAndShifted {
+  call MongoTasks_Multi.MongoCallMtAndShifted as CallMtAndShifted {
     input:
       sample_base_name = AlignToMtRegShiftedAndMetrics.samples,
       suffix = suffix,
@@ -143,9 +143,10 @@ workflow ParallelAlignAndCallR2 {
       gatk_override = gatk_override,
       gatk_docker_override = gatk_docker_override,
       gatk_version = gatk_version,
+      mem = M2_mem,
       preemptible_tries = preemptible_tries,
       JsonTools = JsonTools,
-      batch_size = batch_size,
+      #batch_size = batch_size,
       n_cpu = n_cpu
   }
 

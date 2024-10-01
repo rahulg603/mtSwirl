@@ -259,7 +259,7 @@ workflow MitochondriaPipeline {
       preemptible_tries = preemptible_tries,
       n_cpu_bwa = n_cpu_bwa,
       batch_size = batch_size,
-      n_cpu = n_cpu_m2_hc_lift
+      n_cpu = 8
   }
 
   call MongoTasks_Multi.MongoLiftoverVCFAndGetCoverage as LiftOverAfterSelf {
