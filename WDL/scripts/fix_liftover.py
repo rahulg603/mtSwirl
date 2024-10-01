@@ -1451,7 +1451,7 @@ def left_align_and_normalize(mt, mt_meta, reference, reference_fasta_path, outpu
     bcftools_output = re.search('^Lines   total/split/realigned/skipped:\t([0-9]+)/([0-9]+)/([0-9]+)/([0-9]+)$', bcftools_split_output[0])
     if not bcftools_output:
         raise subprocess.SubprocessError('ERROR: bcftools output did not match expected format.')
-    mt_new, mt_meta_new = read_mito_vcf('tmp_fixed.vcf', reference)
+    mt_new, mt_meta_new = read_mito_vcf(f'{output_prefix}.tmp_fixed.vcf', reference)
     if int(bcftools_output[1]) != mt.count_rows():
         raise subprocess.SubprocessError('ERROR: bcftools did not count the same number of variants as was in input mt.')
     if mt_new.count_rows() != mt.count_rows():
