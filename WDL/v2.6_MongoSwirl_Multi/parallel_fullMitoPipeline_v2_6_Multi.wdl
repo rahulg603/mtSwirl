@@ -262,7 +262,7 @@ workflow MitochondriaPipeline {
       n_cpu = 8
   }
 
-  call MongoTasks_Multi.MongoLiftoverVCFAndGetCoverage as LiftOverAfterSelf {
+  call ParallelMongoTasks_Multi.ParallelMongoLiftoverVCFAndGetCoverage as LiftOverAfterSelf {
     input:
       sample_name = AlignAndCallR2.samples,
       selfref_bundle = ProduceSelfRefFiles.selfref_bundle,
@@ -293,7 +293,8 @@ workflow MitochondriaPipeline {
       JsonTools = JsonTools,
       self_suffix = self_ref_suffix,
 
-      n_cpu = 4,
+      n_cpu = 32,
+      batch_size = batch_size,
       genomes_cloud_docker = genomes_cloud_docker,
       preemptible_tries = preemptible_tries
   }

@@ -1166,3 +1166,320 @@ task ParallelMongoCallMtAndShifted {
     Array[File] shifted_output_bamOut = obj_out.shifted_output_bamOut
   }
 }
+
+task ParallelMongoLiftoverVCFAndGetCoverage {
+  # A specialized routine to return the resultant VCF back to GRCh38
+  input {
+    Array[String] sample_name
+    File selfref_bundle
+    Array[String] ref_homoplasmies_vcf
+    Array[File] r2_self_ref_vcf
+    Array[String] self_homoplasmies_vcf
+
+    Array[String] mt_self
+    Array[String] mt_self_index
+    Array[String] mt_self_dict
+    
+    Array[String] mt_self_shifted
+    Array[String] mt_self_shifted_index
+    Array[String] mt_self_shifted_dict
+
+    Array[File] chain_self_to_ref
+    Array[String] chain_ref_to_self
+
+    Array[File] input_bam_regular_ref
+    Array[File] input_bam_regular_ref_index
+    Array[File] input_bam_shifted_ref
+    #Array[File] input_bam_shifted_ref_index
+    Array[String] self_control_region_shifted_reference_interval_list
+    Array[String] self_non_control_region_interval_list
+
+    String self_suffix
+    File HailLiftover
+    File JsonTools
+    Int batch_size
+    File ref_fasta
+    File ref_fasta_index
+    File ref_dict
+
+    # runtime
+    Int? n_cpu
+    Int? preemptible_tries
+    String genomes_cloud_docker
+  }
+  
+  Float ref_size = size(ref_fasta, "GB") + size(ref_fasta_index, "GB") + size(selfref_bundle, "GB")
+  Float bam_size = size(input_bam_regular_ref, 'GB') + size(input_bam_shifted_ref, 'GB')
+  Int disk_size = ceil(bam_size) + ceil(size(r2_self_ref_vcf, "GB") + ref_size) *2 + 20
+  String d = "$" # a stupid trick to get ${} indexing in bash to work in Cromwell
+
+  command <<<
+    set -e
+
+    tar xf "~{selfref_bundle}"
+    mkdir out
+
+    touch out/lockfile.lock
+
+    liftover_self() {
+      local idx=$1
+
+      sampleNames=('~{sep="' '" sample_name}')
+      ref_hom_vcf=('~{sep="' '" ref_homoplasmies_vcf}')
+      r2_self_ref_vcf=('~{sep="' '" r2_self_ref_vcf}')
+      self_hom_vcf=('~{sep="' '" self_homoplasmies_vcf}')
+      self_fastas=('~{sep="' '" mt_self}')
+      self_fais=('~{sep="' '" mt_self_index}')
+      self_shifted_fastas=('~{sep="' '" mt_self_shifted}')
+      self_ref_chains=('~{sep="' '" chain_self_to_ref}')
+      ref_self_chains=('~{sep="' '" chain_ref_to_self}')
+
+      self_bams=('~{sep="' '" input_bam_regular_ref}')
+      self_shifted_bams=('~{sep="' '" input_bam_shifted_ref}')
+      control_int=('~{sep="' '" self_control_region_shifted_reference_interval_list}')
+      noncontrol_int=('~{sep="' '" self_non_control_region_interval_list}')
+
+      local this_sample_t="~{d}{sampleNames[idx]}"
+      local this_self_ref_vcf="~{d}{r2_self_ref_vcf[idx]}"
+      local this_ref_filtered_vcf="~{d}{ref_hom_vcf[idx]}"
+      local this_rev_hom_ref_vcf="~{d}{self_hom_vcf[idx]}"
+      local this_self_to_ref_chain="~{d}{self_ref_chains[idx]}"
+      local this_ref_to_self_chain="~{d}{ref_self_chains[idx]}"
+      local this_self_fasta="~{d}{self_fastas[idx]}"
+      local this_self_fai="~{d}{self_fais[idx]}"
+      local this_self_shifted_fasta="~{d}{self_shifted_fastas[idx]}"
+      local this_self_control="~{d}{control_int[idx]}"
+      local this_self_non_control="~{d}{noncontrol_int[idx]}"
+      local this_self_bam="~{d}{self_bams[idx]}"
+      local this_self_shifted_bam="~{d}{self_shifted_bams[idx]}"
+
+      local this_sample=out/"~{d}{this_sample_t}"
+      local this_temp="~{d}{this_sample_t}~{self_suffix}"
+      local this_basename="~{d}{this_sample}~{self_suffix}.split"
+      local this_logging="~{d}{this_basename}_fix_liftover.log"
+      local intersected_vcfs_fold="intersected_vcfs_~{d}{this_sample_t}"
+
+      samtools index "~{d}{this_self_shifted_bam}"
+
+      bgzip -c "~{d}{this_self_ref_vcf}" > "~{d}{this_self_ref_vcf}.bgz" && tabix -f "~{d}{this_self_ref_vcf}.bgz"
+      tabix -f "~{d}{this_rev_hom_ref_vcf}"
+      bcftools isec -p "~{d}{intersected_vcfs_fold}" -Ov "~{d}{this_self_ref_vcf}.bgz" "~{d}{this_rev_hom_ref_vcf}"
+
+      # there should be no records private to reversed hom ref VCF
+      local private_to_rev_hom_ref=$(cat ./"~{d}{intersected_vcfs_fold}"/0001.vcf | grep ^chrM | wc -l | sed 's/^ *//g')
+      if [ $private_to_rev_hom_ref -ne 0 ]; then
+        echo "ERROR: There should not be any variants private to the reversed hom ref VCF."
+        exit 1;
+      fi
+
+      java -jar /usr/gitc/picard.jar LiftoverVcf \
+        I=./"~{d}{intersected_vcfs_fold}"/0000.vcf \
+        O="~{d}{this_basename}.selfToRef.pre.vcf" \
+        R=~{ref_fasta} \
+        CHAIN="~{d}{this_self_to_ref_chain}" \
+        REJECT="~{d}{this_basename}.selfToRef.rejected.pre.vcf"
+
+      java -jar /usr/gitc/picard.jar MergeVcfs \
+        I="~{d}{this_basename}.selfToRef.rejected.pre.vcf" \
+        I=./"~{d}{intersected_vcfs_fold}"/0002.vcf \
+        O="~{d}{this_basename}.selfToRef.rejected.vcf"
+
+      sed -e 's/^chr//' "~{d}{this_ref_filtered_vcf}" \
+        | awk '{OFS="\t"; if (!/^#/){print $1,$2-(length($4)>1 ? 0 : 1),$2-1+length($4),$4"/"$5,"+",length($4),length($5)}}' > "~{d}{this_temp}_filtered.bed"
+      sed -e 's/^chr//' "~{d}{this_basename}.selfToRef.pre.vcf" \
+        | awk '{OFS="\t"; if (!/^#/){print $1,$2-(length($4)>1 ? 0 : 1),$2-1+length($4),$4"/"$5,"+",length($4),length($5)}}' > "~{d}{this_temp}_success.bed"
+      echo "Now comparing ~{d}{this_temp}_filtered.bed and ~{d}{this_temp}_success.bed..."
+      local n_ref_pass_thru=$(bedtools intersect -a "~{d}{this_temp}_filtered.bed" -b "~{d}{this_temp}_success.bed" | awk '{OFS="\t"; if (($7 == 1)) {print}}' | wc -l | sed 's/^ *//g')
+      echo $n_ref_pass_thru > "~{d}{this_sample}_n_ref_pass_thru.txt"
+
+      if [ $n_ref_pass_thru -ne 0 ]; then
+        echo "ERROR: All variants changed in the self-reference, and all sites within self-reference insertions (excluding the first base), should have failed LiftoverVcf, which is not the case here."
+        exit 1;
+      fi
+      
+      local n_filtered=$(cat "~{d}{this_ref_filtered_vcf}" | grep ^chrM | wc -l | sed 's/^ *//g')
+      local n_original=$(cat "~{d}{this_self_ref_vcf}" | grep ^chrM | wc -l | sed 's/^ *//g')
+      local n_pass=$(cat "~{d}{this_basename}.selfToRef.pre.vcf" | grep ^chrM | wc -l | sed 's/^ *//g')
+      local n_rejected=$(cat "~{d}{this_basename}.selfToRef.rejected.vcf" | grep ^chrM | wc -l | sed 's/^ *//g')
+      local n_pass_rejected=$((n_pass + n_rejected))
+      echo $n_pass > "~{d}{this_sample}_n_pass.txt"
+
+      if [ $n_filtered -gt $n_rejected ]; then
+        echo "ERROR: the number of sites changed in the self-reference should be less than or equal to the number of sites rejected on initial LiftoverVcf run."
+        exit 1;
+      fi
+
+      if [ $n_pass_rejected -ne $n_original ]; then
+        echo "ERROR: Records appear to have been lost. The sum of records in passing and rejected VCFs should be the same as the number in the original VCF."
+        exit 1;
+      fi
+
+      echo "$n_filtered sites are changed in self-reference. $n_original sites were found variant after second-round Mutect. Of these, $n_pass passed first-round Liftover and $n_rejected failed and are being piped to Hail pipeline for rescue."
+
+      # now run hail script to fix the rejects
+      python3.7 ~{HailLiftover} \
+      --vcf-file "~{d}{this_basename}.selfToRef.rejected.vcf" \
+      --success-vcf-file "~{d}{this_basename}.selfToRef.pre.vcf" \
+      --self-homoplasmies "~{d}{this_rev_hom_ref_vcf}" \
+      --individual-name "~{d}{this_sample_t}" \
+      --self-to-ref-chain "~{d}{this_self_to_ref_chain}" \
+      --ref-to-self-chain "~{d}{this_ref_to_self_chain}" \
+      --self-fasta "~{d}{this_self_fasta}" \
+      --self-fai "~{d}{this_self_fai}" \
+      --reference-fasta ~{ref_fasta} \
+      --reference-fai ~{ref_fasta_index} \
+      --output-prefix "~{d}{this_basename}.round2liftover" \
+      --export-homoplasmic-deletions-coverage \
+      --output-txt-for-wdl \
+      --logging "~{d}{this_logging}"
+
+      bgzip -cd "~{d}{this_basename}.round2liftover.rejected.vcf.bgz" > "~{d}{this_basename}.round2liftover.rejected.vcf"
+      bgzip -cd "~{d}{this_basename}.round2liftover.fixed.vcf.bgz" > "~{d}{this_basename}.round2liftover.fixed.vcf"
+      bgzip -cd "~{d}{this_basename}.round2liftover.updated_success.vcf.bgz" > "~{d}{this_basename}.round2liftover.updated_success.vcf"
+
+      java -jar /usr/gitc/picard.jar MergeVcfs \
+        I="~{d}{this_basename}.round2liftover.updated_success.vcf" \
+        I="~{d}{this_basename}.round2liftover.fixed.vcf" \
+        O="~{d}{this_basename}.selfToRef.final.vcf"
+
+      local n_final_pass=$(cat "~{d}{this_basename}.selfToRef.final.vcf" | grep ^chrM | wc -l | sed 's/^ *//g')
+      echo $n_final_pass > "~{d}{this_sample}_n_final_pass.txt"
+
+      echo "Now producing coverage file..."
+      java -jar /usr/gitc/picard.jar CollectHsMetrics \
+        I="~{d}{this_self_bam}" \
+        R="~{d}{this_self_fasta}" \
+        PER_BASE_COVERAGE="~{d}{this_temp}_non_control_region.tsv" \
+        O="~{d}{this_temp}_non_control_region.metrics" \
+        TI="~{d}{this_self_non_control}" \
+        BI="~{d}{this_self_non_control}" \
+        COVMAX=20000 \
+        SAMPLE_SIZE=1
+
+      java -jar /usr/gitc/picard.jar CollectHsMetrics \
+        I="~{d}{this_self_shifted_bam}" \
+        R="~{d}{this_self_shifted_fasta}" \
+        PER_BASE_COVERAGE="~{d}{this_temp}_control_region_shifted.tsv" \
+        O="~{d}{this_temp}_control_region_shifted.metrics" \
+        TI="~{d}{this_self_control}" \
+        BI="~{d}{this_self_control}" \
+        COVMAX=20000 \
+        SAMPLE_SIZE=1
+
+      R --vanilla <<CODE
+        full_fasta <- readLines("~{d}{this_self_fasta}") # edited to account for variable reference sizes
+        nlen <- nchar(paste0(full_fasta[2:length(full_fasta)],collapse=''))
+        nshift <- 8000
+        shift_back <- function(x) {
+          if (x < (nlen-nshift+1)) {
+            return(x + nshift)
+          } else {
+            return (x - (nlen-nshift))
+          }
+        }
+
+        control_region_shifted = read.table("~{d}{this_temp}_control_region_shifted.tsv", header=T)
+        shifted_back = sapply(control_region_shifted[,"pos"], shift_back)
+        control_region_shifted[,"pos"] = shifted_back
+
+        beginning = subset(control_region_shifted, control_region_shifted[,'pos']<8000)
+        end = subset(control_region_shifted, control_region_shifted[,'pos']>8000)
+
+        non_control_region = read.table("~{d}{this_temp}_non_control_region.tsv", header=T)
+        combined_table = rbind(beginning, non_control_region, end)
+        write.table(combined_table, "~{d}{this_basename}.per_base_coverage.tsv", row.names=F, col.names=T, quote=F, sep="\t")
+
+    CODE
+
+      echo "Now outputting a final table with integers..."
+      paste -d "\t" "~{d}{this_basename}.round2liftover.all_int_outputs.txt" <(printf "n_liftover_changed_selfref_and_passed\n$(cat ~{d}{this_sample}_n_ref_pass_thru.txt)\n") <(printf "n_liftover_r1_pass\n$(cat ~{d}{this_sample}_n_pass.txt)\n") <(printf "n_liftover_r2_pass\n$(cat ~{d}{this_sample}_n_final_pass.txt)\n") > "~{d}{this_basename}.round2liftover.all_int_outputs.final.txt"
+
+      {
+        flock 200
+        python ~{JsonTools} \
+        --path out/jsonout.json \
+        --set-int n_liftover_changed_selfref_and_passed="$(cat ~{d}{this_sample}_n_ref_pass_thru.txt)" \
+          n_liftover_r2_failed="$(cat ~{d}{this_basename}.round2liftover.round2_failed_sites.txt)" \
+          n_liftover_r2_fixed="$(cat ~{d}{this_basename}.round2liftover.round2_fixed_sites.txt)" \
+          n_liftover_r2_pass="$(cat ~{d}{this_sample}_n_final_pass.txt)" \
+          idx="~{d}{idx}" \
+          n_liftover_r2_left_shift="$(cat ~{d}{this_basename}.round2liftover.left_alignment_of_indels.txt)" \
+          n_liftover_r2_injected_from_success="$(cat ~{d}{this_basename}.round2liftover.round2_success_injected.txt)" \
+          n_liftover_r2_ref_insertion_new_haplo="$(cat ~{d}{this_basename}.round2liftover.ref_insertion_new_haplos.txt)" \
+          n_liftover_r2_failed_het_dele_span_insertion_boundary="$(cat ~{d}{this_basename}.round2liftover.het_deletions_span_insertions.txt)" \
+          n_liftover_r2_failed_new_dupes_leftshift="$(cat ~{d}{this_basename}.round2liftover.new_dupes_left_shift_failed.txt)" \
+          n_liftover_r2_het_ins_sharing_lhs_hom_dele="$(cat ~{d}{this_basename}.round2liftover.het_insertions_sharing_lhs_with_hom_ref_deletion.txt)" \
+          n_liftover_r2_spanning_complex="$(cat ~{d}{this_basename}.round2liftover.het_dele_span_insert_repaired_with_complex_rework.txt)" \
+          n_liftover_r2_spanningfixrhs_sharedlhs="$(cat ~{d}{this_basename}.round2liftover.heteroplasmic_deletions_sharing_lhs_with_homoplasmic_insertion_spanning_rhs.txt)" \
+          n_liftover_r2_spanningfixlhs_upstream="$(cat ~{d}{this_basename}.round2liftover.heteroplasmic_deletions_spanning_only_lhs_of_homoplasmic_insertion.txt)" \
+          n_liftover_r2_repaired_success="$(cat ~{d}{this_basename}.round2liftover.success_sites_flipped.txt)" \
+        --set samples="~{d}{this_sample_t}" \
+          liftover_r1_rejected_vcf="~{d}{this_basename}.selfToRef.rejected.vcf" \
+          liftover_r1_vcf="~{d}{this_basename}.selfToRef.pre.vcf" \
+          liftover_r2_success_r1_vcf="~{d}{this_basename}.round2liftover.updated_success.vcf" \
+          liftover_r2_rejected_vcf="~{d}{this_basename}.round2liftover.rejected.vcf" \
+          liftover_r2_intermediate_vcf="~{d}{this_basename}.round2liftover.fixed.vcf" \
+          liftover_r2_final_vcf="~{d}{this_basename}.selfToRef.final.vcf" \
+          liftover_r2_log="~{d}{this_logging}" \
+          gap_coverage="~{d}{this_basename}.round2liftover.deletions_coverage.tsv" \
+          self_coverage_table="~{d}{this_basename}.per_base_coverage.tsv" \
+          liftoverStats="~{d}{this_basename}.round2liftover.all_int_outputs.final.txt"
+      } 200>"out/lockfile.lock"
+    }
+
+    export -f liftover_self
+    # n_cpu_t=$(nproc)
+    echo "len of input bam: $((~{length(input_bam)}-1))"
+    seq 0 $((~{length(input_bam)}-1)) | xargs -n 1 -P ~{select_first([floor(n_cpu / 2), floor(batch_size / 2)])} -I {} bash -c 'liftover_self "$@"' _ {}
+
+    # enforce ordering of json
+    python <<EOF
+  import json
+  with open('out/jsonout.json', 'r') as json_file:
+    data = json.load(json_file)
+  idx = data['idx']
+  reordered_data = {key: [value for _, value in sorted(zip(idx, data[key]))] for key in data.keys()}
+  with open('out/jsonout.json', 'w') as json_file:
+    json.dump(reordered_data, json_file, indent=4)
+  EOF
+  >>>
+  
+  runtime {
+    disks: "local-disk " + disk_size + " SSD"
+    memory: "2500 MB"
+    cpu: select_first([n_cpu, 2])
+    docker: genomes_cloud_docker
+    preemptible: select_first([preemptible_tries, 5])
+  }
+
+  output {
+    Object obj_out = read_json("out/jsonout.json")
+    Array[String] samples = obj_out.samples
+    Array[File] liftover_r1_rejected_vcf = obj_out.liftover_r1_rejected_vcf
+    Array[File] liftover_r1_vcf = obj_out.liftover_r1_vcf
+    Array[File] liftover_r2_success_r1_vcf = obj_out.liftover_r2_success_r1_vcf
+    Array[File] liftover_r2_rejected_vcf = obj_out.liftover_r2_rejected_vcf
+    Array[File] liftover_r2_intermediate_vcf = obj_out.liftover_r2_intermediate_vcf
+    Array[File] liftover_r2_final_vcf = obj_out.liftover_r2_final_vcf
+    Array[File] liftover_r2_log = obj_out.liftover_r2_log
+    Array[File] gap_coverage = obj_out.gap_coverage
+    Array[File] self_coverage_table = obj_out.self_coverage_table
+    Array[File] liftoverStats = obj_out.liftoverStats
+    
+    # stats
+    Array[Int] n_liftover_changed_selfref_and_passed = obj_out.n_liftover_changed_selfref_and_passed
+    Array[Int] n_liftover_r2_failed = obj_out.n_liftover_r2_failed
+    Array[Int] n_liftover_r2_fixed = obj_out.n_liftover_r2_fixed
+    Array[Int] n_liftover_r2_pass = obj_out.n_liftover_r2_pass
+    Array[Int] n_liftover_r2_left_shift = obj_out.n_liftover_r2_left_shift
+    Array[Int] n_liftover_r2_injected_from_success = obj_out.n_liftover_r2_injected_from_success
+    Array[Int] n_liftover_r2_ref_insertion_new_haplo = obj_out.n_liftover_r2_ref_insertion_new_haplo
+    Array[Int] n_liftover_r2_failed_het_dele_span_insertion_boundary = obj_out.n_liftover_r2_failed_het_dele_span_insertion_boundary
+    Array[Int] n_liftover_r2_failed_new_dupes_leftshift = obj_out.n_liftover_r2_failed_new_dupes_leftshift
+    Array[Int] n_liftover_r2_het_ins_sharing_lhs_hom_dele = obj_out.n_liftover_r2_het_ins_sharing_lhs_hom_dele
+    Array[Int] n_liftover_r2_spanning_complex = obj_out.n_liftover_r2_spanning_complex
+    Array[Int] n_liftover_r2_spanningfixrhs_sharedlhs = obj_out.n_liftover_r2_spanningfixrhs_sharedlhs #read_int('out/~{sample_name}~{self_suffix}.split.round2liftover.heteroplasmic_deletions_sharing_lhs_with_homoplasmic_insertion_spanning_rhs.txt')
+    Array[Int] n_liftover_r2_spanningfixlhs_upstream = obj_out.n_liftover_r2_spanningfixlhs_upstream #read_int('out/~{sample_name}~{self_suffix}.split.round2liftover.heteroplasmic_deletions_spanning_only_lhs_of_homoplasmic_insertion.txt')
+    Array[Int] n_liftover_r2_repaired_success = obj_out.n_liftover_r2_repaired_success
+  }
+}
