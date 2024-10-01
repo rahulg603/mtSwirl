@@ -1429,8 +1429,8 @@ task ParallelMongoLiftoverVCFAndGetCoverage {
 
     export -f liftover_self
     # n_cpu_t=$(nproc)
-    echo "len of input bam: $((~{length(input_bam)}-1))"
-    seq 0 $((~{length(input_bam)}-1)) | xargs -n 1 -P ~{select_first([floor(n_cpu / 2), floor(batch_size / 2)])} -I {} bash -c 'liftover_self "$@"' _ {}
+    echo "len of input bam: $((~{length(input_bam_regular_ref)}-1))"
+    seq 0 $((~{length(input_bam_regular_ref)}-1)) | xargs -n 1 -P ~{select_first([floor(n_cpu / 2), floor(batch_size / 2)])} -I {} bash -c 'liftover_self "$@"' _ {}
 
     # enforce ordering of json
     python <<EOF
