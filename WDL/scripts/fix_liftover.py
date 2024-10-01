@@ -5,8 +5,6 @@ import argparse
 import subprocess
 from copy import deepcopy
 from datetime import datetime
-hl.init(master='local[2]')
-hl._set_flags(no_whole_stage_codegen='1')
 
 
 NONREF = '<NON_REF>'
@@ -1732,7 +1730,11 @@ def write_outcome_log(s, final_mt, original_mt, failed_to_liftover, success_vcf,
 def main(vcf_file, success_vcf_file, individual_name, self_to_ref_chain, ref_to_self_chain, self_fasta, self_fai, self_homoplasmies, logging,
          reference_fasta, reference_fai, allow_NONREF, simple_entry_field_correction, output_prefix, export_homoplasmic_deletions_coverage, output_txt_for_wdl, 
          skip_checkpoint, skip_norm, always_fail_on_dupe, debug):
+    
     ###### SET UP SELF-REFERENCE AND LOGGING ########
+    hl.init(master='local[2]', log=f'{output_prefix}.hail_internal_logging.log')
+    hl._set_flags(no_whole_stage_codegen='1')
+    
     individual_name_input = individual_name
     individual_name = compatiblify_sample_name(individual_name)
     self_ref = hl.ReferenceGenome(individual_name, ['chrM'], {'chrM':fai_to_len(self_fai)}, mt_contigs=['chrM'])
