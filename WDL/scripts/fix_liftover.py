@@ -1407,7 +1407,7 @@ def flip_success_fields(mt_success, mt_meta, repaired_mt, insertions, deletions)
     return mt_success_final, n_success_flipped
 
 
-def left_align_and_normalize(mt, mt_meta, reference, reference_fasta_path):
+def left_align_and_normalize(mt, mt_meta, reference, reference_fasta_path, output_prefix):
     """
     Here we use bcftools norm to normalize and left-align variants. We have tested this extensively:
 
@@ -1441,8 +1441,8 @@ def left_align_and_normalize(mt, mt_meta, reference, reference_fasta_path):
     
     All of these seem appropriate.
     """
-    hl.export_vcf(mt, 'tmp.vcf', metadata=mt_meta)
-    res = subprocess.run(["bcftools", 'norm', '-f', reference_fasta_path, 'tmp.vcf', '-o', 'tmp_fixed.vcf'], 
+    hl.export_vcf(mt, f'{output_prefix}.tmp.vcf', metadata=mt_meta)
+    res = subprocess.run(["bcftools", 'norm', '-f', reference_fasta_path, f'{output_prefix}.tmp.vcf', '-o', f'{output_prefix}.tmp_fixed.vcf'], 
                          stderr=subprocess.PIPE, text=True, check=True)
 
     if res.returncode != 0:
@@ -1925,7 +1925,7 @@ def main(vcf_file, success_vcf_file, individual_name, self_to_ref_chain, ref_to_
     final_mt = drop_info(final_mt.drop(*ENTRY_drop_fields), ROW_drop_fields).persist()
     if not skip_norm:
         print('Running bcftools norm to left-align and shift indels...', file=log)
-        final_mt, final_metadata_2, n_left_aligned, message = left_align_and_normalize(final_mt, final_metadata, ref, reference_fasta)
+        final_mt, final_metadata_2, n_left_aligned, message = left_align_and_normalize(final_mt, final_metadata, ref, reference_fasta, output_prefix)
         print('bcftools returned: ' + message, file=log)
     else:
         final_mt = final_mt.key_rows_by().select_rows(*final_success_mt.row).key_rows_by('locus','alleles')
