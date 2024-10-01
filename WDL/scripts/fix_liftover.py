@@ -5,8 +5,8 @@ import argparse
 import subprocess
 from copy import deepcopy
 from datetime import datetime
-hl._set_flags(no_whole_stage_codegen='1')
 hl.init(master='local[2]')
+hl._set_flags(no_whole_stage_codegen='1')
 
 
 NONREF = '<NON_REF>'
