@@ -1213,6 +1213,10 @@ task ParallelMongoLiftoverVCFAndGetCoverage {
   Int disk_size = ceil(bam_size) + ceil(size(r2_self_ref_vcf, "GB") + ref_size) *2 + 20
   String d = "$" # a stupid trick to get ${} indexing in bash to work in Cromwell
 
+  Int adjusted_ncpu = ceil(n_cpu/2)
+  Int adjusted_batch_size = ceil(batch_size/2)
+  Int n_threads_run = select_first([adjusted_ncpu, adjusted_batch_size])
+
   command <<<
     set -e
 
@@ -1430,7 +1434,7 @@ task ParallelMongoLiftoverVCFAndGetCoverage {
     export -f liftover_self
     # n_cpu_t=$(nproc)
     echo "len of input bam: $((~{length(input_bam_regular_ref)}-1))"
-    seq 0 $((~{length(input_bam_regular_ref)}-1)) | xargs -n 1 -P ~{select_first([ceil(n_cpu / 2)-1, ceil(batch_size / 2)-1])} -I {} bash -c 'liftover_self "$@"' _ {}
+    seq 0 $((~{length(input_bam_regular_ref)}-1)) | xargs -n 1 -P ~{n_threads_run} -I {} bash -c 'liftover_self "$@"' _ {}
 
     # enforce ordering of json
     python <<EOF
