@@ -25,6 +25,31 @@ META_DICT = {
             "Number": "1",
             "Type": "Float",
         },
+        "MPOS": {
+            "Description": "median distance from end of read",
+            "Number": "1",
+            "Type": "Integer",
+        },
+        "AS_SB_TABLE": {
+            "Description": "Allele-specific forward/reverse read counts for strand bias tests. Includes the reference and alleles separated by |.",
+            "Number": "1",
+            "Type": "String",
+        },
+        "STR": {
+            "Description": "Variant is a short tandem repeat",
+            "Number": "0",
+            "Type": "Flag",
+        },
+        "STRQ": {
+            "Description": "Phred-scaled quality that alt alleles in STRs are not polymerase slippage errors",
+            "Number": "1",
+            "Type": "Integer",
+        },
+        "RPA": {
+            "Description": "Number of times tandem repeat unit is repeated, for each allele (including reference)",
+            "Number": "R",
+            "Type": "Integer",
+        },
         'AD': {"Description": "Allelic depth of REF and ALT", "Number": "R", "Type": "Integer"},
         'OriginalSelfRefAlleles': {
             'Description':'Original self-reference alleles (only if alleles were changed in Liftover repair pipeline)', 
@@ -34,7 +59,9 @@ META_DICT = {
             'Description':'Fields remapped during liftover (only if alleles were changed in Liftover repair pipeline)', 
             'Number':'1', 
             'Type':'String'
-        }
+        },
+        'F2R1': {"Description": "Count of reads in F2R1 pair orientation supporting each allele", "Number": "R", "Type": "Integer"},
+        'F1R2': {"Description": "Count of reads in F1R2 pair orientation supporting each allele", "Number": "R", "Type": "Integer"}
     },
 }
 
@@ -147,7 +174,8 @@ def run_variants(args):
     mt_list = []
     for sample, file_path in input_paths.items():
         mt = hl.import_vcf(file_path, reference_genome="GRCh38")
-        fields_of_interest = {'OriginalSelfRefAlleles':'array<str>', 'SwappedFieldIDs':'str'}
+        fields_of_interest = {'OriginalSelfRefAlleles':'array<str>', 'SwappedFieldIDs':'str',
+                              'F2R1':'array<int32>', 'F1R2':'array<int32>'}
         if 'GT' in mt.entry:
             mt = mt.drop('GT')
         for x, item_type in fields_of_interest.items():
@@ -157,6 +185,11 @@ def run_variants(args):
         mt = mt.annotate_entries(
             MQ=hl.float(mt.info["MMQ"][1]),
             TLOD=mt.info["TLOD"][0],
+            MPOS=mt.info["MPOS"][0],
+            AS_SB_TABLE=mt.info["AS_SB_TABLE"],
+            STR=mt.info["STR"],
+            STRQ=mt.info["STRQ"],
+            RPA=mt.info["RPA"],
             FT=hl.if_else(hl.len(mt.filters) == 0, {"PASS"}, mt.filters),
         )        
         mt = mt.key_cols_by(s=sample)
