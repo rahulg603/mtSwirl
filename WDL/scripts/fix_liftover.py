@@ -1732,7 +1732,7 @@ def main(vcf_file, success_vcf_file, individual_name, self_to_ref_chain, ref_to_
          skip_checkpoint, skip_norm, always_fail_on_dupe, debug):
     
     ###### SET UP SELF-REFERENCE AND LOGGING ########
-    hl.init(master='local[2]', log=f'{output_prefix}.hail_internal_logging.log')
+    hl.init(master='local[2]', log=f'{output_prefix}.hail_internal_logging.log', tmp_dir=f'{output_prefix}_hail_tmpdir')
     hl._set_flags(no_whole_stage_codegen='1')
     
     individual_name_input = individual_name
