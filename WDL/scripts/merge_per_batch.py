@@ -198,7 +198,7 @@ def run_variants(args):
                     mt = mt.annotate_entries(**{x: mt.info[x][0]})
                 else:
                     mt = mt.annotate_entries(**{x: mt.info[x]})
-                if META_DICT['format'][x]['Type'] == 'Flag':
+                if mt.info[x].dtype == hl.dtype['tbool']:
                     # flag is not supported in FORMAT
                     mt = mt.annotate_entries(**{x: hl.if_else(mt.info[x], 1, 0)})
         mt = mt.key_cols_by(s=sample)
