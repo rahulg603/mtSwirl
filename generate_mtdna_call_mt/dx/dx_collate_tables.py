@@ -411,8 +411,13 @@ def main(pipeline_output_folder, vcf_suffix, coverage_suffix, mtstats_suffix, yi
     #final_stats_table = pd.read_csv(os.getcwd() + '/' + re.sub('ht$', 'tsv', per_sample_stats_output), sep='\t')
     final_stats_table['genetic_sex'] = final_stats_table.genetic_sex.astype(str)
     for field in ['discordance_prc', 'read_haps_error_percentage', 'freemix_percentage', 'yield', 'prc_proper_pairs', 'prc_auto_ge_15x']:
-        final_stats_table[field] = final_stats_table[field].map(lambda x: np.nan if x == 'None' else x).astype(float)
-    ht_stats = hl.Table.from_pandas(final_stats_table).repartition(50).key_by('s')
+        if field in final_stats_table.columns:
+            final_stats_table[field] = final_stats_table[field].map(lambda x: np.nan if x == 'None' else x).astype(float)
+    for field in ['alias']:
+        if field in final_stats_table.columns:
+            final_stats_table[field] = final_stats_table[field].map(lambda x: np.nan if x == 'None' else x).astype(str)
+    ht_stats = hl.Table.from_pandas(final_stats_table).checkpoint(f'dnax://{my_database}/tmp2/stats_output_temp.ht')
+    ht_stats = ht_stats.repartition(50).key_by('s')
     #ht_stats = hl.import_table('file:///' + os.getcwd() + '/' + re.sub('ht$', 'tsv', per_sample_stats_output), impute=True, min_partitions=50)
     ht_stats.write(f'dnax://{my_database}/{per_sample_stats_output}', overwrite=True)
 
