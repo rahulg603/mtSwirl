@@ -217,8 +217,8 @@ def coverage_merging(paths, num_merges, chunk_size, check_from_disk,
 
 def join_two_mts(mt1, mt2, row_keep, col_keep, temp_dir, partitions):
 
-    mt1 = mt1.select_rows(*row_keep).select_cols(col_keep)
-    mt2 = mt2.select_rows(*row_keep).select_cols(col_keep)
+    mt1 = mt1.select_rows(*row_keep).select_cols(*col_keep)
+    mt2 = mt2.select_rows(*row_keep).select_cols(*col_keep)
 
     if (mt1.row.dtype != mt2.row.dtype) or (mt1.col.dtype != mt2.col.dtype) or (mt1.entry.dtype != mt2.entry.dtype):
         raise ValueError('ERROR: when joining MatrixTables, schemas must be the same.')
@@ -227,12 +227,16 @@ def join_two_mts(mt1, mt2, row_keep, col_keep, temp_dir, partitions):
     return mt_append
 
 
-def append_coverage_to_old(cov_mt, old_mt_path, this_merged_mt, n_final_partitions, temp_dir):
+def append_coverage_to_old(cov_mt, old_mt_path, n_final_partitions, temp_dir):
+
+    this_merged_mt = os.path.join(temp_dir, 'coverage_tmp_appended_to_old_dataset_final.mt')
+    cov_mt = cov_mt.checkpoint(os.path.join(temp_dir, 'coverage_mt_new_keyed_pre_merge_with_old.mt'), overwrite=True)
 
     if hl.hadoop_is_file(this_merged_mt + '/_SUCCESS'):
         cov_mt = hl.read_matrix_table(this_merged_mt)
     else:
         old_mt = hl.read_matrix_table(old_mt_path)
+        print(f'Second database imported with {str(old_mt.count()[1])} samples.')
         cov_mt = join_two_mts(mt1 = old_mt, mt2 = cov_mt, row_keep = [], col_keep = ['batch'], temp_dir=temp_dir, partitions=n_final_partitions)
         cov_mt = cov_mt.repartition(n_final_partitions).checkpoint(this_merged_mt, overwrite=True) 
 
@@ -240,6 +244,7 @@ def append_coverage_to_old(cov_mt, old_mt_path, this_merged_mt, n_final_partitio
 
 
 def add_coverage_annotations(cov_mt):
+    n_samples = cov_mt.count_cols()
     cov_mt = cov_mt.annotate_rows(
         mean=hl.float(hl.agg.mean(cov_mt.coverage)),
         median=hl.median(hl.agg.collect(cov_mt.coverage)),

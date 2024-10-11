@@ -7,7 +7,7 @@ import pyspark
 
 import hail as hl
 
-from ..merging_utils import coverage_merging, append_coverage_to_old, add_coverage_annotations
+from merging_utils import coverage_merging, append_coverage_to_old, add_coverage_annotations
 
 logging.basicConfig(
     format="%(asctime)s (%(name)s %(lineno)s): %(message)s",
@@ -60,13 +60,9 @@ def main(args):  # noqa: D103
             existing_database = my_database
         
         old_mt_path = f'dnax://{existing_database}/{args.append_to_existing}/'
-        this_merged_mt_path = f'dnax://{temp_dir}/coverage_tmp_appended_to_old_dataset_final.mt'
-        cov_mt = cov_mt.checkpoint(f'dnax://{temp_dir}/coverage_mt_new_keyed_pre_merge_with_old.mt')
 
-        cov_mt = append_coverage_to_old(cov_mt, old_mt_path, this_merged_mt=this_merged_mt_path, n_final_partitions=args.n_final_partitions, temp_dir=temp_dir)
+        cov_mt = append_coverage_to_old(cov_mt, old_mt_path, n_final_partitions=args.n_final_partitions, temp_dir=temp_dir)
         logger.info('Coverage table successfully appended.')
-
-    n_samples = cov_mt.count_cols()
 
     logger.info("Adding coverage annotations...")
     # Calculate the mean and median coverage as well the fraction of samples above 100x or 1000x coverage at each base
