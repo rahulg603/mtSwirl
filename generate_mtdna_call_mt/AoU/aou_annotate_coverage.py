@@ -50,7 +50,8 @@ def main(args):  # noqa: D103
 
         old_mt_path = args.append_to_existing
 
-        cov_mt = append_coverage_to_old(cov_mt, old_mt_path, n_final_partitions=args.n_final_partitions, temp_dir=temp_dir)
+        cov_mt = append_coverage_to_old(cov_mt, old_mt_path, col_keep=['batch'],
+                                        n_final_partitions=args.n_final_partitions, temp_dir=temp_dir)
         logger.info('Coverage table successfully appended.')
 
     logger.info("Adding coverage annotations...")
