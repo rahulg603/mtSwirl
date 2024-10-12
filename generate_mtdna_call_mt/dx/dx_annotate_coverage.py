@@ -1,11 +1,14 @@
 import argparse
 import logging
 import re
-import sys
+import sys, os
 import dxpy
 import pyspark
 
 import hail as hl
+
+parent_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+sys.path.append(parent_dir)
 
 from merging_utils import coverage_merging, append_coverage_to_old, add_coverage_annotations
 

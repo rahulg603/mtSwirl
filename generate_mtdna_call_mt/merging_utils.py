@@ -62,7 +62,7 @@ def multi_way_union_mts(mts: list, temp_dir: str, chunk_size: int, min_partition
             # Multiway zip join will produce an __entries annotation, which is an array where each element is a struct containing the __entries annotation (array of structs) for that sample
             merged = hl.Table.multi_way_zip_join(to_merge, "__entries", "__cols")
             if min_partitions > 10:
-                merged = merged.checkpoint(f"{prefix}stage_{stage}_job_{i}_pre.ht", overwrite=True)
+                merged = merged.checkpoint(os.path.join(temp_dir, f"{prefix}stage_{stage}_job_{i}_pre.ht", overwrite=True))
             # Flatten __entries while taking into account different entry lengths at different samples/variants (samples lacking a variant will be NA)
             merged = merged.annotate(
                 __entries=hl.flatten(
@@ -256,7 +256,6 @@ def add_coverage_annotations(cov_mt):
     return cov_mt
 
 
-# NOTE NEED TO VERIFY THE ROW AND COLUMN FIELDS THAT MAKE IT INTO THIS TEMP FILE
 def append_vcf_to_old(combined_mt, old_mt_path, col_keep, n_final_partitions, temp_dir):
     this_merged_mt = os.path.join(temp_dir, 'variants_tmp_appended_to_old_dataset_final.mt')
 

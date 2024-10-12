@@ -2,11 +2,14 @@ import argparse
 from curses import pair_content
 import logging
 import math
-import os
+import os, sys
 import dxpy
 import pyspark
 
 import hail as hl
+
+parent_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+sys.path.append(parent_dir)
 
 from merging_utils import collect_vcf_paths, vcf_merging_and_processing
 
