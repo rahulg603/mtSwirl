@@ -34,7 +34,7 @@ def main(args):  # noqa: D103
     file_name = args.file_name
     minimum_homref_coverage = args.minimum_homref_coverage
     num_merges = args.split_merging
-    vcf_col_name = 'vcf'
+    vcf_col_name = args.vcf_col_name
     hl.init(tmp_dir=temp_dir)
 
     if int(hl.version().split('-')[0].split('.')[2]) >= 75: # only use this if using hail 0.2.75 or greater

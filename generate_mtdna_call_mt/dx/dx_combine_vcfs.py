@@ -38,7 +38,7 @@ def main(args):  # noqa: D103
     file_name = args.file_name
     minimum_homref_coverage = args.minimum_homref_coverage
     num_merges = args.split_merging
-    vcf_col_name = 'vcf'
+    vcf_col_name = args.vcf_col_name
     sc = pyspark.SparkContext()
     spark = pyspark.sql.SparkSession(sc)
     hl.init(sc=sc, tmp_dir=temp_dir)
