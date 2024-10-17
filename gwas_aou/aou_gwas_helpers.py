@@ -183,14 +183,79 @@ def get_case_only_mtdna_callset(num_to_keep=310, overwrite=False):
     return ht
 
 
-def get_positive_control_phenotypes(sample_covariates, overwrite=False):
-
+def get_positive_control_phenotype_names():
     measure_list = {3036277: 'centimeter', 
                     3004501: 'milligram per deciliter', 
                     903115: 'millimeter mercury column',
                     903118: 'millimeter mercury column'}
     measures = '903133, 3004501, 903115, 903118'
     allowed_operators = ['=','No matching concept']
+    return measure_list, measures, allowed_operators
+
+
+def grab_positive_control_phenos(measures, measure_list, allowed_operators):
+    data_sql = f"""
+        SELECT 
+            measurement.PERSON_ID,
+            measurement.MEASUREMENT_DATETIME,
+            m_ext.src_id as DATA_SOURCE,
+            measurement.visit_occurrence_id as VISIT_ID,
+            measurement.MEASUREMENT_CONCEPT_ID, 
+            m_standard_concept.concept_name as STANDARD_CONCEPT_NAME, 
+            m_standard_concept.vocabulary_id as STANDARD_VOCABULARY, 
+            measurement.UNIT_CONCEPT_ID, 
+            m_unit.concept_name as UNIT_CONCEPT_NAME, 
+            measurement.MEASUREMENT_TYPE_CONCEPT_ID, 
+            m_type.concept_name as MEASUREMENT_TYPE_CONCEPT_NAME, 
+            measurement.MEASUREMENT_SOURCE_CONCEPT_ID, 
+            m_source_concept.concept_name as SOURCE_CONCEPT_NAME, 
+            m_source_concept.vocabulary_id as SOURCE_VOCABULARY,
+            measurement.VALUE_AS_NUMBER,
+            measurement.VALUE_AS_CONCEPT_ID, 
+            m_value.concept_name as VALUE_AS_CONCEPT_NAME, 
+            m_operator.concept_name as OPERATOR_CONCEPT_NAME
+        FROM `{DATASET}.measurement` measurement 
+        LEFT JOIN `{DATASET}.measurement_ext` m_ext 
+            ON measurement.measurement_id = m_ext.measurement_id
+        LEFT JOIN `{DATASET}.concept` m_standard_concept 
+            ON measurement.measurement_concept_id = m_standard_concept.concept_id 
+        LEFT JOIN `{DATASET}.concept` m_unit 
+            ON measurement.unit_concept_id = m_unit.concept_id 
+        LEFT JOIN `{DATASET}.concept` m_type 
+            ON measurement.measurement_type_concept_id = m_type.concept_id 
+        LEFT JOIN `{DATASET}.concept` m_source_concept 
+            ON measurement.measurement_source_concept_id = m_source_concept.concept_id 
+        LEFT JOIN `{DATASET}.concept` m_value 
+            ON measurement.value_as_concept_id = m_value.concept_id 
+        LEFT JOIN `{DATASET}.concept` m_operator 
+            ON measurement.operator_concept_id = m_operator.concept_id 
+        WHERE
+            measurement_source_concept_id IN ({measures})"""
+    
+    wgs_data_measure = pd.read_gbq(data_sql, dialect="standard")
+    wgs_data_measure_latest = wgs_data_measure.sort_values('MEASUREMENT_DATETIME'
+                                                ).groupby(['MEASUREMENT_CONCEPT_ID', 'PERSON_ID']
+                                                ).tail(1)
+    wgs_data_measure_latest['correct_measure'] = wgs_data_measure_latest.MEASUREMENT_CONCEPT_ID.map(measure_list)
+    wgs_data_measure_latest = wgs_data_measure_latest[wgs_data_measure_latest.correct_measure == wgs_data_measure_latest.UNIT_CONCEPT_NAME]
+    wgs_data_measure_latest = wgs_data_measure_latest[wgs_data_measure_latest.OPERATOR_CONCEPT_NAME.isin(allowed_operators)]
+    wgs_data_measure_latest['measurement_year'] = pd.DatetimeIndex(wgs_data_measure_latest.MEASUREMENT_DATETIME).year
+    wgs_data_measure_latest['measurement_time'] = wgs_data_measure_latest.MEASUREMENT_DATETIME.astype('int') / 10**9
+
+    return wgs_data_measure, wgs_data_measure_latest
+
+
+def import_and_process_pos_control_phenos(path_latest_csv):
+    ht_latest = hl.import_table(path_latest_csv, min_partitions=100, impute=True, 
+                                types={'VALUE_AS_NUMBER': hl.tfloat64}, missing=['NA',''])
+    ht_latest = ht_latest.annotate(phenotype = munge_phenotype_name(ht_latest.STANDARD_CONCEPT_NAME))
+    ht_latest = ht_latest.annotate(s = hl.str(ht_latest.PERSON_ID)).drop('PERSON_ID').key_by('s')
+    return ht_latest
+
+
+def get_positive_control_phenotypes(sample_covariates, overwrite=False):
+
+    measure_list, measures, allowed_operators = get_positive_control_phenotype_names()
 
     if hl.hadoop_exists(f'{SANITY_PHENOS_PATH}/_SUCCESS') and not overwrite:
         ht_pheno_out = hl.read_table(SANITY_PHENOS_PATH)
@@ -199,64 +264,14 @@ def get_positive_control_phenotypes(sample_covariates, overwrite=False):
     else:
         temp_phenos = f'{GWAS_DIR}sanity_phenotypes/demog_obtained_traits.tsv'
         temp_phenos_latest = f'{GWAS_DIR}sanity_phenotypes/demog_obtained_traits_latest.tsv'
+        
         if not hl.hadoop_exists(temp_phenos) or overwrite:
-
-            data_sql = f"""
-                SELECT 
-                    measurement.PERSON_ID,
-                    measurement.MEASUREMENT_DATETIME,
-                    m_ext.src_id as DATA_SOURCE,
-                    measurement.visit_occurrence_id as VISIT_ID,
-                    measurement.MEASUREMENT_CONCEPT_ID, 
-                    m_standard_concept.concept_name as STANDARD_CONCEPT_NAME, 
-                    m_standard_concept.vocabulary_id as STANDARD_VOCABULARY, 
-                    measurement.UNIT_CONCEPT_ID, 
-                    m_unit.concept_name as UNIT_CONCEPT_NAME, 
-                    measurement.MEASUREMENT_TYPE_CONCEPT_ID, 
-                    m_type.concept_name as MEASUREMENT_TYPE_CONCEPT_NAME, 
-                    measurement.MEASUREMENT_SOURCE_CONCEPT_ID, 
-                    m_source_concept.concept_name as SOURCE_CONCEPT_NAME, 
-                    m_source_concept.vocabulary_id as SOURCE_VOCABULARY,
-                    measurement.VALUE_AS_NUMBER,
-                    measurement.VALUE_AS_CONCEPT_ID, 
-                    m_value.concept_name as VALUE_AS_CONCEPT_NAME, 
-                    m_operator.concept_name as OPERATOR_CONCEPT_NAME
-                FROM `{DATASET}.measurement` measurement 
-                LEFT JOIN `{DATASET}.measurement_ext` m_ext 
-                    ON measurement.measurement_id = m_ext.measurement_id
-                LEFT JOIN `{DATASET}.concept` m_standard_concept 
-                    ON measurement.measurement_concept_id = m_standard_concept.concept_id 
-                LEFT JOIN `{DATASET}.concept` m_unit 
-                    ON measurement.unit_concept_id = m_unit.concept_id 
-                LEFT JOIN `{DATASET}.concept` m_type 
-                    ON measurement.measurement_type_concept_id = m_type.concept_id 
-                LEFT JOIN `{DATASET}.concept` m_source_concept 
-                    ON measurement.measurement_source_concept_id = m_source_concept.concept_id 
-                LEFT JOIN `{DATASET}.concept` m_value 
-                    ON measurement.value_as_concept_id = m_value.concept_id 
-                LEFT JOIN `{DATASET}.concept` m_operator 
-                    ON measurement.operator_concept_id = m_operator.concept_id 
-                WHERE
-                    measurement_source_concept_id IN ({measures})"""
-            
-            wgs_data_measure = pd.read_gbq(data_sql, dialect="standard")
+            wgs_data_measure, wgs_data_measure_latest = grab_positive_control_phenos(measure_list=measure_list, measures=measures, allowed_operators=allowed_operators)
             wgs_data_measure.to_csv(temp_phenos, index=False, sep='\t')
-
-            wgs_data_measure_latest = wgs_data_measure.sort_values('MEASUREMENT_DATETIME'
-                                                     ).groupby(['MEASUREMENT_CONCEPT_ID', 'PERSON_ID']
-                                                     ).tail(1)
-            wgs_data_measure_latest['correct_measure'] = wgs_data_measure_latest.MEASUREMENT_CONCEPT_ID.map(measure_list)
-            wgs_data_measure_latest = wgs_data_measure_latest[wgs_data_measure_latest.correct_measure == wgs_data_measure_latest.UNIT_CONCEPT_NAME]
-            wgs_data_measure_latest = wgs_data_measure_latest[wgs_data_measure_latest.OPERATOR_CONCEPT_NAME.isin(allowed_operators)]
-            wgs_data_measure_latest['measurement_year'] = pd.DatetimeIndex(wgs_data_measure_latest.MEASUREMENT_DATETIME).year
-            wgs_data_measure_latest['measurement_time'] = wgs_data_measure_latest.MEASUREMENT_DATETIME.astype('int') / 10**9
             wgs_data_measure_latest.to_csv(temp_phenos_latest, index=False, sep='\t')
 
         #ht_all = hl.import_table(temp_phenos, min_partitions=100, impute=True)
-        ht_latest = hl.import_table(temp_phenos_latest, min_partitions=100, impute=True, 
-                                    types={'VALUE_AS_NUMBER': hl.tfloat64}, missing=['NA',''])
-        ht_latest = ht_latest.annotate(phenotype = munge_phenotype_name(ht_latest.STANDARD_CONCEPT_NAME))
-        ht_latest = ht_latest.annotate(s = hl.str(ht_latest.PERSON_ID)).drop('PERSON_ID').key_by('s')
+        ht_latest = import_and_process_pos_control_phenos(temp_phenos_latest)
         ht_latest = ht_latest.annotate(year_of_birth = sample_covariates[ht_latest.s].year_of_birth,
                                        isFemale = sample_covariates[ht_latest.s].isFemale)
         ht_latest = ht_latest.annotate(approx_age = ht_latest.measurement_year - ht_latest.year_of_birth)
