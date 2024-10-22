@@ -25,6 +25,31 @@ META_DICT = {
             "Number": "1",
             "Type": "Float",
         },
+        "MPOS": {
+            "Description": "median distance from end of read",
+            "Number": "1",
+            "Type": "Integer",
+        },
+        "AS_SB_TABLE": {
+            "Description": "Allele-specific forward/reverse read counts for strand bias tests. Includes the reference and alleles separated by |.",
+            "Number": "1",
+            "Type": "String",
+        },
+        "STR": {
+            "Description": "Variant is a short tandem repeat. 1 if True, 0 if False.",
+            "Number": "1",
+            "Type": "Integer",
+        },
+        "STRQ": {
+            "Description": "Phred-scaled quality that alt alleles in STRs are not polymerase slippage errors",
+            "Number": "1",
+            "Type": "Integer",
+        },
+        "RPA": {
+            "Description": "Number of times tandem repeat unit is repeated, for each allele (including reference)",
+            "Number": "R",
+            "Type": "Integer",
+        },
         'AD': {"Description": "Allelic depth of REF and ALT", "Number": "R", "Type": "Integer"},
         'OriginalSelfRefAlleles': {
             'Description':'Original self-reference alleles (only if alleles were changed in Liftover repair pipeline)', 
@@ -34,7 +59,9 @@ META_DICT = {
             'Description':'Fields remapped during liftover (only if alleles were changed in Liftover repair pipeline)', 
             'Number':'1', 
             'Type':'String'
-        }
+        },
+        'F2R1': {"Description": "Count of reads in F2R1 pair orientation supporting each allele", "Number": "R", "Type": "Integer"},
+        'F1R2': {"Description": "Count of reads in F1R2 pair orientation supporting each allele", "Number": "R", "Type": "Integer"}
     },
 }
 
@@ -147,18 +174,33 @@ def run_variants(args):
     mt_list = []
     for sample, file_path in input_paths.items():
         mt = hl.import_vcf(file_path, reference_genome="GRCh38")
-        fields_of_interest = {'OriginalSelfRefAlleles':'array<str>', 'SwappedFieldIDs':'str'}
+        fields_of_interest = {'OriginalSelfRefAlleles':'array<str>', 'SwappedFieldIDs':'str',
+                              'F2R1':'array<int32>', 'F1R2':'array<int32>'}
         if 'GT' in mt.entry:
             mt = mt.drop('GT')
         for x, item_type in fields_of_interest.items():
             if x not in mt.entry:
                 mt = mt.annotate_entries(**{x: hl.missing(item_type)})
         mt = mt.select_entries("DP", "AD", *list(fields_of_interest.keys()), HL=mt.AF[0])
+        # tuples are if we should index to the 0th element of an array
+        info_of_interest = {'MPOS':('int32',True), 'AS_SB_TABLE':('str',False), 
+                            'STR':('int32',False), 'STRQ':('int32',False), 'RPA':('array<int32>',False)}
         mt = mt.annotate_entries(
             MQ=hl.float(mt.info["MMQ"][1]),
             TLOD=mt.info["TLOD"][0],
             FT=hl.if_else(hl.len(mt.filters) == 0, {"PASS"}, mt.filters),
-        )        
+        )
+        for x, (item_type, to_index) in info_of_interest.items():
+            if x not in mt.info:
+                mt = mt.annotate_entries(**{x: hl.missing(item_type)})
+            else:
+                if to_index:
+                    mt = mt.annotate_entries(**{x: mt.info[x][0]})
+                else:
+                    mt = mt.annotate_entries(**{x: mt.info[x]})
+                if mt.info[x].dtype == hl.dtype('tbool'):
+                    # flag is not supported in FORMAT
+                    mt = mt.annotate_entries(**{x: hl.if_else(mt.info[x], 1, 0)})
         mt = mt.key_cols_by(s=sample)
         mt = mt.select_rows()
         mt_list.append(mt)
