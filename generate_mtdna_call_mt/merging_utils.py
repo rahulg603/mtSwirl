@@ -354,7 +354,6 @@ def vcf_merging(vcf_paths: Dict[str, str], temp_dir: str, logger, n_final_partit
                 # Because the vcfs are split, there is only one AF value, although misinterpreted as an array because Number=A in VCF header
                 # Second value of MMQ is the value of the mapping quality for the alternate allele
                 # Add FT annotation for sample genotype filters (pull these from filters annotations of the single-sample VCFs)
-                meta = deepcopy(META_DICT_BASE)
                 if include_extra_v2_fields:
                     if 'GT' in mt.entry:
                         mt = mt.drop('GT')
