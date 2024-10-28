@@ -287,7 +287,7 @@ def vcf_merging_and_processing(vcf_paths, coverage_mt_path, include_extra_v2_fie
         logger.info("Combining VCFs...")
         combined_mt, meta = vcf_merging(vcf_paths=vcf_paths, temp_dir=temp_dir, logger=logger, chunk_size=chunk_size, 
                                         include_extra_v2_fields=include_extra_v2_fields, num_merges=num_merges,
-                                        single_sample=single_sample)
+                                        single_sample=single_sample, n_final_partitions=n_final_partitions)
         combined_mt = combined_mt.repartition(100).checkpoint(output_path_mt, overwrite=overwrite)
     
     logger.info("Removing select sample-level filters...")
@@ -308,7 +308,8 @@ def vcf_merging_and_processing(vcf_paths, coverage_mt_path, include_extra_v2_fie
     return combined_mt, meta
 
 
-def vcf_merging(vcf_paths: Dict[str, str], temp_dir: str, logger, chunk_size: int = 100, include_extra_v2_fields: bool = False, num_merges: int = 1,
+def vcf_merging(vcf_paths: Dict[str, str], temp_dir: str, logger, n_final_partitions, 
+                chunk_size: int = 100, include_extra_v2_fields: bool = False, num_merges: int = 1,
                 single_sample: bool = False) -> hl.MatrixTable:
     """
     Reformat and join individual mitochondrial VCFs into one MatrixTable.
@@ -319,6 +320,11 @@ def vcf_merging(vcf_paths: Dict[str, str], temp_dir: str, logger, chunk_size: in
     :param include_extra_v2_fields: Includes extra fields important for analysis of v2.1 source MTs
     :return: Joined MatrixTable of samples given in vcf_paths dictionary
     """
+    # Update VCF metadata
+    meta = deepcopy(META_DICT_BASE)
+    if include_extra_v2_fields:
+        meta['format'].update(META_DICT_V2_FMT)
+
     list_paths = list(vcf_paths.items())
     list_paths.sort(key=lambda y: y[0])
     if num_merges == 1:
@@ -339,7 +345,7 @@ def vcf_merging(vcf_paths: Dict[str, str], temp_dir: str, logger, chunk_size: in
             for batch, vcf_path in subset:
                 idx+=1
                 try:
-                    mt = hl.import_vcf(vcf_path, reference_genome="GRCh38")
+                    mt = hl.import_vcf(vcf_path, reference_genome="GRCh38", array_elements_required=False)
                 except Exception as e:
                     raise ValueError(
                         f"vcf path {vcf_path} does not exist for sample {batch}"
@@ -352,7 +358,6 @@ def vcf_merging(vcf_paths: Dict[str, str], temp_dir: str, logger, chunk_size: in
                 if include_extra_v2_fields:
                     if 'GT' in mt.entry:
                         mt = mt.drop('GT')
-                    meta['format'].update(META_DICT_V2_FMT)
                     
                 if single_sample:
                     if include_extra_v2_fields:
@@ -416,7 +421,7 @@ def vcf_merging(vcf_paths: Dict[str, str], temp_dir: str, logger, chunk_size: in
                         logger.info(f"Imported batch {str(idx)}...")
 
             combined_mt_this = multi_way_union_mts(mt_list, temp_dir, chunk_size, min_partitions=1, check_from_disk=False, prefix=this_prefix)
-            combined_mt_this = combined_mt_this.repartition(args.n_final_partitions // num_merges).checkpoint(this_subset_mt, overwrite=True)
+            combined_mt_this = combined_mt_this.repartition(n_final_partitions // num_merges).checkpoint(this_subset_mt, overwrite=True)
             mt_list_subsets.append(combined_mt_this)
     
     if num_merges == 1:
