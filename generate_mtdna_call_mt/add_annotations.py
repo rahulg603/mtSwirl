@@ -8,6 +8,8 @@ import sys
 import sys, os
 sys.path.append('/home/jupyter/')
 
+hl.init(log='annotations_logging.log')
+
 from collections import Counter
 from textwrap import dedent
 
@@ -2313,7 +2315,7 @@ def main(args):  # noqa: D103
 
     logger.info("Writing sample annotations...")
     mt = add_sample_annotations(mt, min_hom_threshold)
-    sample_ht = mt.cols()
+    sample_ht = mt.cols().persist()
     sample_ht.group_by(sample_ht.hap).aggregate(n=hl.agg.count()).export(
         f"{output_dir}/haplogroup_counts.txt"
     )  # Counts of top level haplogroups
