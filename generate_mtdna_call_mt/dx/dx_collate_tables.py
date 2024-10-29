@@ -318,7 +318,7 @@ def compute_nuc_coverage(df, column_name):
 
 
 def main(pipeline_output_folder, vcf_suffix, coverage_suffix, mtstats_suffix, yield_suffix, idxstats_suffix, qc_stats_folder, qc_suffix,
-         file_paths_table_output, per_sample_stats_output, dx_init, avoid_filtering_idxstats_chr, unified_prefix):
+         file_paths_table_output, per_sample_stats_output, dx_init, avoid_filtering_idxstats_chr, unified_prefix, max_threads):
 
     # start SQL session
     my_database = dxpy.find_one_data_object(name=dx_init.lower())["id"]
@@ -368,14 +368,14 @@ def main(pipeline_output_folder, vcf_suffix, coverage_suffix, mtstats_suffix, yi
     # import stats and qc and merge all into table
     print(f'{datetime.now().strftime("%H:%M:%S")}: Importing all statistics...')
     print(f'{datetime.now().strftime("%H:%M:%S")}: Importing run statistics...')
-    stats_table = import_and_cat_tables(downloaded_files, 'batch', 'stats', 'batch', enforce_nonmiss=False)
+    stats_table = import_and_cat_tables(downloaded_files, 'batch', 'stats', 'batch', enforce_nonmiss=False, max_threads=max_threads)
     print(f'{datetime.now().strftime("%H:%M:%S")}: Importing yield statistics...')
-    yield_table = import_and_cat_tables(downloaded_files, 'batch', 'yield', 'batch', enforce_nonmiss=False)
+    yield_table = import_and_cat_tables(downloaded_files, 'batch', 'yield', 'batch', enforce_nonmiss=False, max_threads=max_threads)
     print(f'{datetime.now().strftime("%H:%M:%S")}: Importing idxstats statistics...')
     if avoid_filtering_idxstats_chr:
-        idxstats_table = import_and_cat_tables(downloaded_files, 'batch', 'idxstats', 'batch', enforce_nonmiss=False)
+        idxstats_table = import_and_cat_tables(downloaded_files, 'batch', 'idxstats', 'batch', enforce_nonmiss=False, max_threads=max_threads)
     else:
-        idxstats_table = import_and_cat_tables(downloaded_files, 'batch', 'idxstats', 'batch', enforce_nonmiss=False, filter_chr=AUTOSOMES)
+        idxstats_table = import_and_cat_tables(downloaded_files, 'batch', 'idxstats', 'batch', enforce_nonmiss=False, filter_chr=AUTOSOMES, max_threads=max_threads)
 
     # produce munged idxstats table
     idxstats_summary = idxstats_table.groupby(idxstats_table['s']).agg(
@@ -391,7 +391,7 @@ def main(pipeline_output_folder, vcf_suffix, coverage_suffix, mtstats_suffix, yi
     else:
         middle_id_item = list(middle_id_item)[0]
     downloaded_qc_files['s_mod'] = downloaded_qc_files.s.str.split('_').map(lambda x: x[0] + '_' + middle_id_item + '_' + x[2] + '_' + x[3])
-    qc_table = import_and_cat_tables(downloaded_qc_files, 's_mod', 'qc', 's', append_ids_and_t=True, filter_by=list(stats_table['s']))
+    qc_table = import_and_cat_tables(downloaded_qc_files, 's_mod', 'qc', 's', append_ids_and_t=True, filter_by=list(stats_table['s']), max_threads=max_threads)
     final_stats_table = stats_table.merge(qc_table, how='outer', on='s'
                                   ).merge(yield_table, how='inner', on=['s','batch']
                                   ).merge(idxstats_summary, how='inner', on='s')
@@ -447,6 +447,8 @@ parser.add_argument('--qc-stats-folder', type=str, default='Bulk/Whole genome se
                     help="Folder containing folders, each of which should contain QC data from WGS. Also supports a single folder with relevant files in it. Do not include project name.")
 parser.add_argument('--qc-suffix', type=str, default='.qaqc_metrics',
                     help="Suffix of each WGS QC file to import. Assumes that this file contains multiple rows for a single sample.")
+parser.add_argument('--max-threads', type=int, default=8,
+                    help='Max number of threads to use when downloading data from fuse.')
 
 parser.add_argument('--avoid-filtering-idxstats-chr', action='store_true',
                     help='If enabled, this flag will prevent filtering to autosomes when producing nucDNA coverage estimates.')
