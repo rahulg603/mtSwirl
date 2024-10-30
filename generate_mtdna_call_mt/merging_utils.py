@@ -601,12 +601,12 @@ def apply_mito_artifact_filter(mt: hl.MatrixTable, artifact_prone_sites_path: st
     mt = mt.annotate_rows(end_overlaps=bed.index(mt.region.end, all_matches=True))
 
     # Create struct containing locus and allele (need to the check if any position of the allele overlaps an artifact-prone site, not just the locus)
-    mt_temp = mt.annotate_rows(variant=hl.struct(locus=mt.locus, alleles=mt.alleles))
-    mt_temp = mt_temp.key_rows_by(mt_temp.region)
+    ht_temp = mt.annotate_rows(variant=hl.struct(locus=mt.locus, alleles=mt.alleles)).rows()
+    ht_temp = ht_temp.key_by(ht_temp.region)
 
     # Need to account for cases where the start and end of the variant interval don't fall within a bed interval, but start before and after the interval (the bed interval falls completely within the variant interval)
     bed_temp = bed.annotate(
-        contained_mt_alleles=mt_temp.index_rows(
+        contained_mt_alleles=ht_temp.index(
             bed.interval.start, all_matches=True
         ).variant
     )
@@ -619,7 +619,7 @@ def apply_mito_artifact_filter(mt: hl.MatrixTable, artifact_prone_sites_path: st
         locus=bed_temp.contained_mt_allele.locus,
         alleles=bed_temp.contained_mt_allele.alleles,
     )
-    bed_temp = bed_temp.key_by(bed_temp.locus, bed_temp.alleles)
+    bed_temp = bed_temp.key_by(bed_temp.locus, bed_temp.alleles).persist()
 
     # Annotate back onto the original mt cases where the bed interval falls completely within the variant interval
     mt = mt.annotate_rows(start_and_end_span=bed_temp[mt.locus, mt.alleles].target)
