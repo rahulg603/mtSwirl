@@ -279,8 +279,6 @@ def vcf_merging_and_processing(vcf_paths, coverage_mt_path, include_extra_v2_fie
                                output_bucket, temp_dir, overwrite):
     output_path_mt = os.path.join(output_bucket, "raw_combined.mt")
     output_path_mt_2 = os.path.join(output_bucket, "raw_combined_2.mt")
-    print(output_path_mt)
-    print(hl.hadoop_exists(f'{output_path_mt}/_SUCCESS'))
 
     if hl.hadoop_exists(f'{output_path_mt}/_SUCCESS') and not overwrite:
         logger.info(f'Reading merged VCF mt from {output_path_mt}...')
@@ -292,7 +290,7 @@ def vcf_merging_and_processing(vcf_paths, coverage_mt_path, include_extra_v2_fie
                                         single_sample=single_sample, n_final_partitions=n_final_partitions)
         combined_mt = combined_mt.naive_coalesce(n_final_partitions).checkpoint(output_path_mt, overwrite=overwrite)
     
-    if hl.hadoop_exsts(f'{output_path_mt_2}/_SUCCESS') and not overwrite:
+    if hl.hadoop_exists(f'{output_path_mt_2}/_SUCCESS') and not overwrite:
         logger.info(f'Reading merged VCF mt from {output_path_mt_2}...')
         combined_mt = hl.read_matrix_table(output_path_mt_2)
     else:
