@@ -277,8 +277,8 @@ def vcf_merging_and_processing(vcf_paths, coverage_mt_path, include_extra_v2_fie
                                minimum_homref_coverage,
                                logger, chunk_size, num_merges, n_final_partitions,
                                output_bucket, temp_dir, overwrite):
-    output_path_mt = f"{output_bucket}/raw_combined.mt"
-    output_path_mt_2 = f"{output_bucket}/raw_combined_2.mt"
+    output_path_mt = os.path.join(output_bucket, "raw_combined.mt")
+    output_path_mt_2 = os.path.join(output_bucket, "raw_combined_2.mt")
 
     if hl.hadoop_exists(f'{output_path_mt}/_SUCCESS') and not overwrite:
         logger.info(f'Reading merged VCF mt from {output_path_mt}...')
