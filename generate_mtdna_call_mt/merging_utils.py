@@ -283,6 +283,7 @@ def vcf_merging_and_processing(vcf_paths, coverage_mt_path, include_extra_v2_fie
     if hl.hadoop_exists(f'{output_path_mt}/_SUCCESS') and not overwrite:
         logger.info(f'Reading merged VCF mt from {output_path_mt}...')
         combined_mt = hl.read_matrix_table(output_path_mt)
+        meta = get_vcf_metadata(include_extra_v2_fields)
     else:
         logger.info("Combining VCFs...")
         combined_mt, meta = vcf_merging(vcf_paths=vcf_paths, temp_dir=temp_dir, logger=logger, chunk_size=chunk_size, 
@@ -312,6 +313,14 @@ def vcf_merging_and_processing(vcf_paths, coverage_mt_path, include_extra_v2_fie
     return combined_mt, meta
 
 
+def get_vcf_metadata(include_extra_v2_fields: bool):
+    meta = deepcopy(META_DICT_BASE)
+    if include_extra_v2_fields:
+        meta['format'].update(META_DICT_V2_FMT)
+
+    return meta
+
+
 def vcf_merging(vcf_paths: Dict[str, str], temp_dir: str, logger, n_final_partitions, 
                 chunk_size: int = 100, include_extra_v2_fields: bool = False, num_merges: int = 1,
                 single_sample: bool = False) -> hl.MatrixTable:
@@ -325,9 +334,7 @@ def vcf_merging(vcf_paths: Dict[str, str], temp_dir: str, logger, n_final_partit
     :return: Joined MatrixTable of samples given in vcf_paths dictionary
     """
     # Update VCF metadata
-    meta = deepcopy(META_DICT_BASE)
-    if include_extra_v2_fields:
-        meta['format'].update(META_DICT_V2_FMT)
+    meta = get_vcf_metadata(include_extra_v2_fields)
 
     list_paths = list(vcf_paths.items())
     list_paths.sort(key=lambda y: y[0])
