@@ -293,7 +293,7 @@ def vcf_merging_and_processing(vcf_paths, coverage_mt_path, include_extra_v2_fie
     
     if hl.hadoop_exists(f'{output_path_mt_2}/_SUCCESS') and not overwrite:
         logger.info(f'Reading merged VCF mt from {output_path_mt_2}...')
-        combined_mt = hl.read_matrix_table(output_path_mt_2)
+        combined_mt = hl.read_matrix_table(output_path_mt_2, _n_partitions=n_final_partitions)
     else:
         logger.info("Removing select sample-level filters...")
         combined_mt = remove_genotype_filters(combined_mt)

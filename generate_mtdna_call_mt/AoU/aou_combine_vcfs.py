@@ -74,7 +74,7 @@ def main(args):  # noqa: D103
     out_mt = f"{output_bucket}/{file_name}.mt"
     out_tsv = f"{output_bucket}/{file_name}.tsv.bgz"
 
-    combined_mt = combined_mt.repartition(args.n_final_partitions).checkpoint(out_mt, overwrite=args.overwrite)
+    combined_mt = combined_mt.naive_coalesce(args.n_final_partitions).checkpoint(out_mt, overwrite=args.overwrite)
 
     logger.info("Writing trimmed variants table...")
     ht_for_tsv = combined_mt.entries()
