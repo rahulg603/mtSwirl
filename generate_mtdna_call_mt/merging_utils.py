@@ -63,7 +63,7 @@ def multi_way_union_mts(mts: list, temp_dir: str, chunk_size: int, min_partition
             # Multiway zip join will produce an __entries annotation, which is an array where each element is a struct containing the __entries annotation (array of structs) for that sample
             merged = hl.Table.multi_way_zip_join(to_merge, "__entries", "__cols")
             if min_partitions > 10:
-                merged = merged.checkpoint(os.path.join(temp_dir, f"{prefix}stage_{stage}_job_{i}_pre.ht", overwrite=True))
+                merged = merged.checkpoint(os.path.join(temp_dir, f"{prefix}stage_{stage}_job_{i}_pre.ht"), overwrite=True)
             # Flatten __entries while taking into account different entry lengths at different samples/variants (samples lacking a variant will be NA)
             merged = merged.annotate(
                 __entries=hl.flatten(
@@ -290,12 +290,16 @@ def vcf_merging_and_processing(vcf_paths, coverage_mt_path, include_extra_v2_fie
                                         single_sample=single_sample, n_final_partitions=n_final_partitions)
         combined_mt = combined_mt.naive_coalesce(n_final_partitions).checkpoint(output_path_mt, overwrite=overwrite)
     
-    logger.info("Removing select sample-level filters...")
-    combined_mt = remove_genotype_filters(combined_mt)
+    if hl.hadoop_exsts(f'{output_path_mt_2}/_SUCCESS') and not overwrite:
+        logger.info(f'Reading merged VCF mt from {output_path_mt_2}...')
+        combined_mt = hl.read_matrix_table(output_path_mt_2)
+    else:
+        logger.info("Removing select sample-level filters...")
+        combined_mt = remove_genotype_filters(combined_mt)
 
-    logger.info("Determining homoplasmic reference sites...")
-    combined_mt = determine_hom_refs(combined_mt, coverage_mt_path, minimum_homref_coverage)
-    combined_mt = combined_mt.checkpoint(output_path_mt_2, overwrite=overwrite)
+        logger.info("Determining homoplasmic reference sites...")
+        combined_mt = determine_hom_refs(combined_mt, coverage_mt_path, minimum_homref_coverage)
+        combined_mt = combined_mt.checkpoint(output_path_mt_2, overwrite=overwrite)
 
     if old_mt_path is not None:
         logger.info("Appending new VCF to old VCF database...")
