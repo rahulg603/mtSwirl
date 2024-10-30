@@ -280,6 +280,7 @@ def vcf_merging_and_processing(vcf_paths, coverage_mt_path, include_extra_v2_fie
     output_path_mt = os.path.join(output_bucket, "raw_combined.mt")
     output_path_mt_2 = os.path.join(output_bucket, "raw_combined_2.mt")
     print(output_path_mt)
+    print(hl.hadoop_exists(f'{output_path_mt}/_SUCCESS'))
 
     if hl.hadoop_exists(f'{output_path_mt}/_SUCCESS') and not overwrite:
         logger.info(f'Reading merged VCF mt from {output_path_mt}...')
