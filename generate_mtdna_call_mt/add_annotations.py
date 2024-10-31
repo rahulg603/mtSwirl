@@ -1079,9 +1079,10 @@ def format_filters(mt, row_f = ['filters'], entry_f = ['FT','FT_LIFT']):
 
 
 def add_filter_annotations(
-    input_mt: hl.MatrixTable,
+    input_mt: hl.MatrixTable, 
     vaf_filter_threshold: float = 0.01,
     min_het_threshold: float = 0.10,
+    output_dir: str = ''
 ) -> hl.MatrixTable:
     """
     Generate histogram for number of individuals with the specified sample-level filter at different heteroplasmy levels.
@@ -1107,6 +1108,7 @@ def add_filter_annotations(
 
     logger.info("Removing low_allele_frac genotypes...")
     input_mt = remove_low_allele_frac_genotypes(input_mt, vaf_filter_threshold)
+    input_mt = input_mt.checkpoint(f"{output_dir}/temp_low_frac.mt", overwrite=args.overwrite)
 
     logger.info("Applying indel_stack filter...")
     input_mt = apply_indel_stack_filter(input_mt)
@@ -1115,6 +1117,8 @@ def add_filter_annotations(
         "Filtering genotypes below with heteroplasmy below the min_het_threshold..."
     )
     input_mt = filter_genotypes_below_min_het_threshold(input_mt, min_het_threshold)
+    input_mt = input_mt.checkpoint(f"{output_dir}/temp_het_filt.mt", overwrite=args.overwrite)
+    
     n_het_below_min_het_threshold = input_mt.aggregate_entries(
         hl.agg.count_where(
             hl.str(input_mt.FT).contains("heteroplasmy_below_min_het_threshold")
@@ -2151,83 +2155,97 @@ def main(args):  # noqa: D103
             logger.info("INTERMEDIATE MT NOT FOUND.")
 
     if run_full:
-        logger.info("Adding genotype annotation...")
-        # NOTE: on import, there are no instances of hl.len(FT) == 0. Missing FT implies no HL measured with confidence.
-        mt = add_genotype(mt_path, min_hom_threshold)
-
-        logger.info("Moving Liftover FT fields to a new entry...")
-        mt = modify_ft_liftover(mt)
-
-        logger.info("Adding annotations from Terra...")
-        mt = add_terra_metadata(mt, participant_data)
-
-        logger.info("Annotating haplogroup-defining variants...")
-        mt = add_hap_defining(mt)
-
-        logger.info("Annotating tRNA predictions...")
-        mt = add_trna_predictions(mt, avoid_fasta_workaround)
-
-        # If 'subset-to-gnomad-release' is set, 'age' and 'pop' are added by the add_gnomad_metadata function.
-        # If 'subset-to-gnomad-release' is not set, the user should include an 'age' and 'pop' column in the file supplied to `participant-data`.
-        if gnomad_subset:
-            logger.info("Adding gnomAD metadata sample annotations...")
-            mt = add_gnomad_metadata(mt)
+        if not args.overwrite and hl.hadoop_exists(f"{output_dir}/prior_to_sample_filt.mt"):
+            mt = hl.read_matrix_table(f"{output_dir}/prior_to_sample_filt.mt")
+        
         else:
-            logger.info("Checking for and adding age and pop annotations...")
-            mt = add_age_and_pop(mt, participant_data)
+            logger.info("Adding genotype annotation...")
+            # NOTE: on import, there are no instances of hl.len(FT) == 0. Missing FT implies no HL measured with confidence.
+            mt = add_genotype(mt_path, min_hom_threshold)
 
-        logger.info("Adding variant context annotations...")
-        mt = add_variant_context(mt)
+            logger.info("Moving Liftover FT fields to a new entry...")
+            mt = modify_ft_liftover(mt)
 
-        # If specified, subet to only the gnomAD samples in the current release
-        if gnomad_subset:
-            logger.warning("Subsetting results to gnomAD release samples...")
+            logger.info("Adding annotations from Terra...")
+            mt = add_terra_metadata(mt, participant_data)
 
-            # Subset to release samples and filter out rows that no longer have at least one alt call
-            mt = mt.filter_cols(mt.release)  # Filter to cols where release is true
-            mt = mt.filter_rows(hl.agg.any(mt.HL > 0))
+            logger.info("Annotating haplogroup-defining variants...")
+            mt = add_hap_defining(mt)
 
-        mt = mt.checkpoint(
-            f"{output_dir}/prior_to_sample_filt.mt", overwrite=args.overwrite
-        )
+            logger.info("Annotating tRNA predictions...")
+            mt = add_trna_predictions(mt, avoid_fasta_workaround)
 
-        logger.info('Removing samples which show overlapping homoplasmies in self-reference construction...')
-        mt, n_removed_overlap = filter_by_hom_overlap(
-            mt, keep_all_samples, args.sample_stats
-        )
+            # If 'subset-to-gnomad-release' is set, 'age' and 'pop' are added by the add_gnomad_metadata function.
+            # If 'subset-to-gnomad-release' is not set, the user should include an 'age' and 'pop' column in the file supplied to `participant-data`.
+            if gnomad_subset:
+                logger.info("Adding gnomAD metadata sample annotations...")
+                mt = add_gnomad_metadata(mt)
+            else:
+                logger.info("Checking for and adding age and pop annotations...")
+                mt = add_age_and_pop(mt, participant_data)
 
-        logger.info("Checking for samples with low/high mitochondrial copy number...")
-        mt, n_removed_below_cn, n_removed_above_cn = filter_by_copy_number(
-            mt, keep_all_samples, max_cn
-        )
+            logger.info("Adding variant context annotations...")
+            mt = add_variant_context(mt)
 
-        logger.info("Checking for contaminated samples...")
-        mt, n_contaminated = filter_by_contamination(mt, output_dir, keep_all_samples)
+            # If specified, subet to only the gnomAD samples in the current release
+            if gnomad_subset:
+                logger.warning("Subsetting results to gnomAD release samples...")
 
-        logger.info("Switch build and checkpoint...")
-        # Switch build 37 to build 38
-        mt = mt.key_rows_by(
-            locus=hl.locus("chrM", mt.locus.position, reference_genome="GRCh38"),
-            alleles=mt.alleles,
-        )
-        # NOTE: at this stage there should still be no instances of hl.len(FT) == 0. Missing FT implies HL not called.
-        # NOTE: all missing HL entries have missing FT. These are entries with low DP so cannot be called hom ref.
-        mt = mt.checkpoint(f"{output_dir}/prior_to_vep.mt", overwrite=args.overwrite)
+                # Subset to release samples and filter out rows that no longer have at least one alt call
+                mt = mt.filter_cols(mt.release)  # Filter to cols where release is true
+                mt = mt.filter_rows(hl.agg.any(mt.HL > 0))
 
-        if not args.fully_skip_vep:
-            logger.info("Adding vep annotations...")
-            mt = add_vep(mt, run_vep, vep_results)
+            mt = mt.checkpoint(
+                f"{output_dir}/prior_to_sample_filt.mt", overwrite=args.overwrite
+            )
 
-        logger.info("Adding dbsnp annotations...")
-        mt = add_rsids(mt, args.band_aid_dbsnp_path_fix)
 
-        logger.info("Annotating MT...")
-        mt, n_het_below_min_het_threshold = add_filter_annotations(
-            mt, vaf_filter_threshold, min_het_threshold
-        )
-        mt = mt.checkpoint(
-            f"{output_dir}/prior_to_filter_genotypes.mt", overwrite=args.overwrite
-        )
+        if not args.overwrite and hl.hadoop_exists(f"{output_dir}/prior_to_vep.mt"):
+            mt = hl.read_matrix_table(f"{output_dir}/prior_to_vep.mt")
+        
+        else:
+            logger.info('Removing samples which show overlapping homoplasmies in self-reference construction...')
+            mt, n_removed_overlap = filter_by_hom_overlap(
+                mt, keep_all_samples, args.sample_stats
+            )
+
+            logger.info("Checking for samples with low/high mitochondrial copy number...")
+            mt, n_removed_below_cn, n_removed_above_cn = filter_by_copy_number(
+                mt, keep_all_samples, max_cn
+            )
+
+            logger.info("Checking for contaminated samples...")
+            mt, n_contaminated = filter_by_contamination(mt, output_dir, keep_all_samples)
+
+            logger.info("Switch build and checkpoint...")
+            # Switch build 37 to build 38
+            mt = mt.key_rows_by(
+                locus=hl.locus("chrM", mt.locus.position, reference_genome="GRCh38"),
+                alleles=mt.alleles,
+            )
+            # NOTE: at this stage there should still be no instances of hl.len(FT) == 0. Missing FT implies HL not called.
+            # NOTE: all missing HL entries have missing FT. These are entries with low DP so cannot be called hom ref.
+            mt = mt.checkpoint(f"{output_dir}/prior_to_vep.mt", overwrite=args.overwrite)
+
+
+        if not args.overwrite and hl.hadoop_exists(f"{output_dir}/prior_to_filter_genotypes.mt"):
+            mt = hl.read_matrix_table(f"{output_dir}/prior_to_filter_genotypes.mt")
+        
+        else:
+            if not args.fully_skip_vep:
+                logger.info("Adding vep annotations...")
+                mt = add_vep(mt, run_vep, vep_results)
+
+            logger.info("Adding dbsnp annotations...")
+            mt = add_rsids(mt, args.band_aid_dbsnp_path_fix)
+
+            logger.info("Annotating MT...")
+            mt, n_het_below_min_het_threshold = add_filter_annotations(
+                mt, vaf_filter_threshold, min_het_threshold, output_dir
+            )
+            mt = mt.checkpoint(
+                f"{output_dir}/prior_to_filter_genotypes.mt", overwrite=args.overwrite
+            )
 
         # Some checks
         # NOTE: at this stage there should still be no instances of hl.len(FT) == 0. Missing FT implies HL not called.
