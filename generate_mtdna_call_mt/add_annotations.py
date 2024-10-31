@@ -2172,6 +2172,10 @@ def main(args):  # noqa: D103
             logger.info("Annotating haplogroup-defining variants...")
             mt = add_hap_defining(mt)
 
+            mt = mt.checkpoint(
+                f"{output_dir}/prior_to_trna.mt", overwrite=args.overwrite
+            )
+
             logger.info("Annotating tRNA predictions...")
             mt = add_trna_predictions(mt, avoid_fasta_workaround)
 
