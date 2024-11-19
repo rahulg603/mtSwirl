@@ -77,3 +77,11 @@ V2_FIELD_KEY = {
 
 V2_INFO_TO_FORMAT = ['MPOS','AS_SB_TABLE','STR','STRQ','RPA']
 V2_INFO_TO_FORMAT_REQUIREINDEX = ['MPOS']
+
+
+LIFTOVERFILTERS = set(['NoTarget','MismatchedRefAllele','IndelStraddlesMultipleIntevals'])
+CUSTOMLIFTOVERFILTERS = set(['FailedPicardLiftoverVcf', 'InsertionSharesForceCalledDeletion', 'InsertionSharesForceCalledInsertion',
+                             'AddGRCh38RefDeleToRefSiteIns', 'ComplexSwapField', 'NewInsertionHaplotype',
+                             'SwapFirstAlleleIndel', 'ReplaceInternalBaseDeletion', 'FancyFieldInversion',
+                             'DeletionSpannedHomoplasmicInsertion', 'LiftoverSuccessEntrySwap', 'ForceCalledHomoplasmy',
+                             'LeftShiftedIndel', 'FailedDuplicateVariant'])

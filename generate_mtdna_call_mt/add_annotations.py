@@ -25,6 +25,8 @@ from gnomad_mitochondria.pipeline.annotation_descriptions import (
     adjust_descriptions,
 )
 
+from merging_constants import *
+
 # Github repo locations for imports:
 # gnomad: https://github.com/broadinstitute/gnomad_methods
 # gnomad_qc: https://github.com/broadinstitute/gnomad_qc
@@ -45,13 +47,6 @@ RESOURCES = {
     "pon_mt_trna": f"gs://{RESOURCE_PATH}/trna_predictions/pon_mt_trna_predictions_08_27_2020.txt",
     "mitotip": f"gs://{RESOURCE_PATH}/trna_predictions/mitotip_scores_08_27_2020.txt",
 }
-
-LIFTOVERFILTERS = set(['NoTarget','MismatchedRefAllele','IndelStraddlesMultipleIntevals'])
-CUSTOMLIFTOVERFILTERS = set(['FailedPicardLiftoverVcf', 'InsertionSharesForceCalledDeletion', 'InsertionSharesForceCalledInsertion',
-                             'AddGRCh38RefDeleToRefSiteIns', 'ComplexSwapField', 'NewInsertionHaplotype',
-                             'SwapFirstAlleleIndel', 'ReplaceInternalBaseDeletion', 'FancyFieldInversion',
-                             'DeletionSpannedHomoplasmicInsertion', 'LiftoverSuccessEntrySwap', 'ForceCalledHomoplasmy',
-                             'LeftShiftedIndel', 'FailedDuplicateVariant'])
 
 
 logging.basicConfig(

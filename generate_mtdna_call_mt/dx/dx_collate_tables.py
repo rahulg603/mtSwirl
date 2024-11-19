@@ -318,7 +318,7 @@ def compute_nuc_coverage(df, column_name):
 
 
 def main(pipeline_output_folder, vcf_suffix, coverage_suffix, mtstats_suffix, yield_suffix, idxstats_suffix, qc_stats_folder, qc_suffix,
-         file_paths_table_output, per_sample_stats_output, dx_init, avoid_filtering_idxstats_chr, unified_prefix, max_threads):
+         file_paths_table_output, per_sample_stats_output, dx_init, avoid_filtering_idxstats_chr, unified_prefix, max_threads, skip_batch):
 
     # start SQL session
     my_database = dxpy.find_one_data_object(name=dx_init.lower())["id"]
@@ -326,6 +326,7 @@ def main(pipeline_output_folder, vcf_suffix, coverage_suffix, mtstats_suffix, yi
     spark = pyspark.sql.SparkSession(sc)
     hl.init(sc=sc, tmp_dir=f'dnax://{my_database}/tmp2/')
     hl._set_flags(no_whole_stage_codegen='1')
+    skip_batch_split = skip_batch.split(',')
 
     # download mito pipeline data
     print(f'{datetime.now().strftime("%H:%M:%S")}: Finding all relevant data objects...')
@@ -351,6 +352,17 @@ def main(pipeline_output_folder, vcf_suffix, coverage_suffix, mtstats_suffix, yi
     print(f'{datetime.now().strftime("%H:%M:%S")}: Obtaining paths...')
     downloaded_files = produce_fuse_file_table(data_dict, {'vcf':vcf_suffix, 'coverage':coverage_suffix, 'stats':mtstats_suffix, 'yield':yield_suffix, 'idxstats':idxstats_suffix})
 
+    # remove any batches to split
+    prefilt = downloaded_files.shape[0]
+    print(f'{datetime.now().strftime("%H:%M:%S")}: Skipping {str(len(skip_batch_split))} batches...')
+    print(f'{datetime.now().strftime("%H:%M:%S")}: Removing {", ".join(skip_batch_split)}...')
+    print(f'{datetime.now().strftime("%H:%M:%S")}: Starting with {str(prefilt)} batches.')
+    downloaded_files = downloaded_files[~downloaded_files.batch.isin(skip_batch_split)]
+    postfilt = downloaded_files.shape[0]
+    print(f'{datetime.now().strftime("%H:%M:%S")}: After filtering, {str(postfilt)} batches remain.')
+    if (prefilt - postfilt) != len(skip_batch_split):
+        raise ValueError('ERROR: the number of batches dropped did not match the length of --skip-batch.')
+
     # checks on downloaded data
     print(f'{datetime.now().strftime("%H:%M:%S")}: Checking file paths...')
     per_row_un = downloaded_files.apply(lambda x: x.apply(lambda y: os.path.basename(os.path.dirname(y))).unique(), 1)
@@ -369,6 +381,11 @@ def main(pipeline_output_folder, vcf_suffix, coverage_suffix, mtstats_suffix, yi
     print(f'{datetime.now().strftime("%H:%M:%S")}: Importing all statistics...')
     print(f'{datetime.now().strftime("%H:%M:%S")}: Importing run statistics...')
     stats_table = import_and_cat_tables(downloaded_files, 'batch', 'stats', 'batch', enforce_nonmiss=False, max_threads=max_threads)
+
+    print(f'{datetime.now().strftime("%H:%M:%S")}: Checking run statistics for duplicates...')
+    if len(downloaded_files.s.unique()) != len(downloaded_files.s):
+        raise ValueError('ERROR: run statistics contain duplicated sample names. This implies that batch names were not duplicated, but samples were rerun successfully.')
+
     print(f'{datetime.now().strftime("%H:%M:%S")}: Importing yield statistics...')
     yield_table = import_and_cat_tables(downloaded_files, 'batch', 'yield', 'batch', enforce_nonmiss=False, max_threads=max_threads)
     print(f'{datetime.now().strftime("%H:%M:%S")}: Importing idxstats statistics...')
@@ -452,7 +469,8 @@ parser.add_argument('--max-threads', type=int, default=8,
 
 parser.add_argument('--avoid-filtering-idxstats-chr', action='store_true',
                     help='If enabled, this flag will prevent filtering to autosomes when producing nucDNA coverage estimates.')
-
+parser.add_argument('--skip-batch', type=str, default='',
+                    help='Comma-separated batch names to filter out.')
 
 # defaults for debugging
 pipeline_output_folder = '220618_MitochondriaPipelineSwirl/v2.5_Multi_first50/,220618_MitochondriaPipelineSwirl/20k/'
@@ -470,6 +488,7 @@ dx_init = '220619_MitochondriaPipelineSwirl_v2_5_Multi_20k'
 dx_init = '220722_MitochondriaPipelineSwirl_v2_5_Multi_200k'
 avoid_filtering_idxstats_chr = False
 unified_prefix = 'batch_'
+skip_batch = ''
 
 
 if __name__ == '__main__':
