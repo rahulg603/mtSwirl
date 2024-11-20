@@ -383,7 +383,7 @@ def main(pipeline_output_folder, vcf_suffix, coverage_suffix, mtstats_suffix, yi
     stats_table = import_and_cat_tables(downloaded_files, 'batch', 'stats', 'batch', enforce_nonmiss=False, max_threads=max_threads)
 
     print(f'{datetime.now().strftime("%H:%M:%S")}: Checking run statistics for duplicates...')
-    if len(downloaded_files.s.unique()) != len(downloaded_files.s):
+    if len(stats_table.s.unique()) != len(stats_table.s):
         raise ValueError('ERROR: run statistics contain duplicated sample names. This implies that batch names were not duplicated, but samples were rerun successfully.')
 
     print(f'{datetime.now().strftime("%H:%M:%S")}: Importing yield statistics...')
