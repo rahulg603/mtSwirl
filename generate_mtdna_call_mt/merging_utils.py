@@ -430,15 +430,16 @@ def vcf_merging(vcf_paths: Dict[str, str], temp_dir: str, logger, n_final_partit
                     else:    
                         logger.info(f"Imported batch {str(idx)}...")
 
-            combined_mt_this = multi_way_union_mts(mt_list, temp_dir, chunk_size, min_partitions=1, check_from_disk=False, prefix=this_prefix)
-            combined_mt_this = combined_mt_this.repartition(n_final_partitions // num_merges).checkpoint(this_subset_mt, overwrite=True)
+            n_indiv_repart = n_final_partitions // num_merges
+            combined_mt_this = multi_way_union_mts(mt_list, temp_dir, chunk_size, min_partitions=n_indiv_repart // 2, check_from_disk=False, prefix=this_prefix)
+            combined_mt_this = combined_mt_this.repartition(n_indiv_repart).checkpoint(this_subset_mt, overwrite=True)
             mt_list_subsets.append(combined_mt_this)
     
     if num_merges == 1:
         combined_mt = mt_list_subsets[0]
     else:
         merged_prefix = f'variant_merging_final_{str(num_merges)}subsets/'
-        combined_mt = multi_way_union_mts(mt_list_subsets, temp_dir, chunk_size, min_partitions=1, check_from_disk=False, prefix=merged_prefix)
+        combined_mt = multi_way_union_mts(mt_list_subsets, temp_dir, chunk_size, min_partitions=n_indiv_repart // 2, check_from_disk=False, prefix=merged_prefix)
 
     return combined_mt, meta
 

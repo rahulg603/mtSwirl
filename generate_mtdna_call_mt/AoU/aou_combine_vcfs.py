@@ -86,7 +86,7 @@ def main(args):  # noqa: D103
     combined_mt = combined_mt.annotate_entries(
         FT=hl.str(";").join(hl.array(combined_mt.FT))
     )
-    hl.export_vcf(combined_mt.repartition(100), out_vcf, metadata=meta)
+    hl.export_vcf(combined_mt.naive_coalesce(100), out_vcf, metadata=meta)
 
 
 
