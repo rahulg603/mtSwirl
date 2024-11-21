@@ -282,7 +282,7 @@ def vcf_merging_and_processing(vcf_paths, coverage_mt_path, include_extra_v2_fie
 
     if hl.hadoop_exists(f'{output_path_mt}/_SUCCESS') and not overwrite:
         logger.info(f'Reading merged VCF mt from {output_path_mt}...')
-        combined_mt = hl.read_matrix_table(output_path_mt)
+        combined_mt = hl.read_matrix_table(output_path_mt, _n_partitions=n_final_partitions)
         meta = get_vcf_metadata(include_extra_v2_fields)
     else:
         logger.info("Combining VCFs...")
@@ -290,6 +290,7 @@ def vcf_merging_and_processing(vcf_paths, coverage_mt_path, include_extra_v2_fie
                                         include_extra_v2_fields=include_extra_v2_fields, num_merges=num_merges,
                                         single_sample=single_sample, n_final_partitions=n_final_partitions)
         combined_mt = combined_mt.naive_coalesce(n_final_partitions).checkpoint(output_path_mt, overwrite=overwrite)
+        combined_mt = hl.read_matrix_table(output_path_mt, _n_partitions=n_final_partitions)
     
     if hl.hadoop_exists(f'{output_path_mt_2}/_SUCCESS') and not overwrite:
         logger.info(f'Reading merged VCF mt from {output_path_mt_2}...')
