@@ -79,7 +79,7 @@ def main(args):  # noqa: D103
     logger.info("Writing trimmed variants table...")
     ht_for_tsv = combined_mt.entries()
     ht_for_tsv = ht_for_tsv.filter(hl.is_missing(ht_for_tsv.HL) | (ht_for_tsv.HL > 0))
-    ht_for_tsv.repartition(50).export(out_tsv)
+    ht_for_tsv.naive_coalesce(100).export(out_tsv)
 
     logger.info("Writing combined VCF...")
     # For the VCF output, join FT values by semicolon
