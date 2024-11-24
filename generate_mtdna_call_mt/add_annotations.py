@@ -2029,12 +2029,13 @@ def process_mt_for_flat_file_analysis(mt, skip_vep, allow_gt_fail):
         base_row_set = base_row_set + ['ancestral', 'most_severe_csq']
     base_col_set = ['batch']
     base_col_set = [x for x in base_col_set if x in mt.col]
+    addl_col_set = ['contamination', 'freemix_percentage', 
+                    'contam_high_het', 'freemix_percentage_imp',
+                    'major_haplogroup', 'hap', 'wgs_median_coverage',
+                    'mt_mean_coverage', 'mito_cn', 'age', 'pop', 
+                    'over_85_mean', 'over_85_count']
     mt = mt.select_globals().select_rows(*base_row_set
-                           ).select_cols(*base_col_set, 'contamination', 'freemix_percentage', 
-                                         'contam_high_het', 'freemix_percentage_imp',
-                                         'major_haplogroup', 'hap', 'wgs_median_coverage',
-                                         'mt_mean_coverage', 'mito_cn', 'age', 'pop', 
-                                         'over_85_mean', 'over_85_count')
+                           ).select_cols(*base_col_set, *addl_col_set)
     ht = mt.filter_entries(hl.is_missing(mt.HL) | (mt.HL > 0)).entries()
 
     # there should not be any empty filters
@@ -2058,8 +2059,10 @@ def process_mt_for_flat_file_analysis(mt, skip_vep, allow_gt_fail):
         raise ValueError('Any missing heteroplasmies at DP > 100 should not be passing in terms of FT.')
 
     ht = ht.annotate(AD_ref = ht.AD[0], AD_alt = ht.AD[1], FT = ht.FT.union(ht.filters)).drop('AD','filters')
-    ht = ht.annotate(F2R1_ref = ht.F2R1[0], F2R1_alt = ht.F2R1[1], F1R2_ref = ht.F1R2[0], F1R2_alt = ht.F1R2[1]).drop('F2R1','F1R2')
-    ht = ht.annotate(RPA_ref = ht.RPA[0], RPA_alt = ht.RPA[1]).drop('RPA')
+    if 'F1R2' in ht.row and 'F2R1' in ht.row:
+        ht = ht.annotate(F2R1_ref = ht.F2R1[0], F2R1_alt = ht.F2R1[1], F1R2_ref = ht.F1R2[0], F1R2_alt = ht.F1R2[1]).drop('F2R1','F1R2')
+    if 'RPA' in ht.row:
+        ht = ht.annotate(RPA_ref = ht.RPA[0], RPA_alt = ht.RPA[1]).drop('RPA')
     if 'AS_SB_TABLE' in ht.row:
         ht = ht.annotate(AS_SB_SPLIT = ht.AS_SB_TABLE.split('\\|'))
         ht = ht.annotate(FWD_SB_ref = hl.if_else(hl.is_defined(ht.AS_SB_TABLE), hl.int32(ht.AS_SB_SPLIT[0].split(',')[0]), hl.missing(hl.tint32)),
@@ -2083,7 +2086,23 @@ def process_mt_for_flat_file_analysis(mt, skip_vep, allow_gt_fail):
     ht = ht.annotate(**{x: make_comma_delim(ht[x]) for x in ['FT','FT_LIFT','OriginalSelfRefAlleles','alleles','rsid']})
     ht = ht.annotate(locus = ht.locus.contig.replace('MT','chrM') + ':' + hl.str(ht.locus.position))
     ht = ht.annotate(variant = ht.locus + ':' + ht.alleles).key_by('locus','alleles','s')
-    return ht.key_by('locus', 'alleles', 's')
+    return ht.key_by('locus', 'alleles', 's'), base_col_set + addl_col_set, base_row_set
+
+
+def process_flat_ht_slim(ht, mt_full, row_keep, col_keep):
+    # organize column data
+    sample_table = mt_full.cols()
+    sample_table = sample_table.select(*[x for x in col_keep if x not in sample_table.key])
+
+    # organize row data
+    row_table = mt_full.rows()
+    row_table = row_table.select(*[x for x in row_keep if x not in row_table.key]).drop('filters')
+
+    # organize entry data
+    cols_to_keep = [x for x in ht.row if x not in sample_table.col and x not in row_table.col and x not in ht.key]
+    entry_table = ht.select(*cols_to_keep)
+
+    return entry_table, sample_table, row_table
 
 
 def main(args):  # noqa: D103
@@ -2318,8 +2337,14 @@ def main(args):  # noqa: D103
         )
 
     logger.info('Writing variants flat file for internal use...')
-    ht_for_output = process_mt_for_flat_file_analysis(mt, args.fully_skip_vep, args.allow_strand_bias)
+    ht_for_output, col_set, row_set = process_mt_for_flat_file_analysis(mt, args.fully_skip_vep, args.allow_strand_bias)
     ht_for_output.export(annotated_mt_path.replace('.mt','_processed_flat.tsv.bgz'))
+
+    logger.info('Writing slimmed flat file for internal use...')
+    ht_for_output_slim, col_data, row_data = process_flat_ht_slim(ht_for_output, mt_full=mt, row_keep=row_set, col_keep=col_set)
+    ht_for_output_slim.export(annotated_mt_path.replace('.mt','_processed_flat_slim.tsv.bgz'))
+    col_data.export(annotated_mt_path.replace('.mt','_processed_flat_slim_sample_data.tsv.bgz'))
+    row_data.export(annotated_mt_path.replace('.mt','_processed_flat_slim_variant_data.tsv.bgz'))
 
     logger.info("Writing ht...")
     variant_ht = mt.rows()
