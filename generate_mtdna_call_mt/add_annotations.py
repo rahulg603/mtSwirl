@@ -2090,17 +2090,25 @@ def process_mt_for_flat_file_analysis(mt, skip_vep, allow_gt_fail):
 
 
 def process_flat_ht_slim(ht, mt_full, row_keep, col_keep):
+    mt = mt_full.select_globals()
+
     # organize column data
-    sample_table = mt_full.cols()
+    sample_table = mt.cols()
     sample_table = sample_table.select(*[x for x in col_keep if x not in sample_table.key])
 
     # organize row data
-    row_table = mt_full.rows()
+    row_table = mt.rows()
     row_table = row_table.select(*[x for x in row_keep if x not in row_table.key]).drop('filters')
 
     # organize entry data
-    cols_to_keep = [x for x in ht.row if x not in sample_table.col and x not in row_table.col and x not in ht.key]
+    cols_to_keep = [x for x in ht.row if x not in sample_table.row and x not in row_table.row and x not in ht.key]
     entry_table = ht.select(*cols_to_keep)
+
+    # entry to drop
+    entry_drop = ['F2R1_ref', 'F2R1_alt', 'F1R2_ref', 'F1R2_alt',
+                  'FWD_SB_ref', 'FWD_SB_alt', 'REV_SB_ref', 'REV_SB_alt',
+                  'RPA_ref', 'RPA_alt', 'MPOS', 'STR', 'STRQ']
+    entry_table = entry_table.drop(*[x for x in entry_drop if x in entry_table.row])
 
     return entry_table, sample_table, row_table
 
@@ -2345,6 +2353,14 @@ def main(args):  # noqa: D103
     ht_for_output_slim.export(annotated_mt_path.replace('.mt','_processed_flat_slim.tsv.bgz'))
     col_data.export(annotated_mt_path.replace('.mt','_processed_flat_slim_sample_data.tsv.bgz'))
     row_data.export(annotated_mt_path.replace('.mt','_processed_flat_slim_variant_data.tsv.bgz'))
+
+    logger.info('Generate non-missing HL file for internal use...')
+    ht_per_var_N = ht_for_output_slim.group_by(ht_for_output_slim.locus, ht_for_output_slim.alleles
+                                    ).aggregate(N_failed = hl.agg.count_where(hl.is_missing(ht_for_output_slim.HL)), 
+                                                N_variant_pass = hl.agg.count_where(~hl.is_missing(ht_for_output_slim.HL)))
+    ht_for_output_slim_def = ht_for_output_slim.filter(hl.is_defined(ht_for_output_slim.HL))
+    ht_per_var_N.export(annotated_mt_path.replace('.mt','_processed_flat_slim_per_variant_N_missing.tsv.bgz'))
+    ht_for_output_slim_def.export(annotated_mt_path.replace('.mt','_processed_flat_slim_qc_pass_HL_only.tsv.bgz'))
 
     logger.info("Writing ht...")
     variant_ht = mt.rows()
