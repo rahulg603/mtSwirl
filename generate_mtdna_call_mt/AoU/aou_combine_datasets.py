@@ -122,7 +122,7 @@ if __name__ == "__main__":
     p.add_argument('--output-vcf', type=str, help='If specified, will generate the VCF (size explodes with sample size).')
     p.add_argument('--single-sample-analysis', type=str, help='If specified, uses single-sample mode.')
     p.add_argument('--output-coverage-flat', type=str, help='If specified, will export per-base coverage flat file..')
-    p.add_argument('--include-extra-v2-fields', type=str, help='Includes new v2 fields if enabled.')
+    p.add_argument('--include-extra-v2-fields', type=str, help='Includes new v2 fields if enabled.', action='store_true')
 
     args = p.parse_args()
 
