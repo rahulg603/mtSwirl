@@ -79,14 +79,15 @@ def main(args):  # noqa: D103
     logger.info("Writing trimmed variants table...")
     ht_for_tsv = combined_mt.entries()
     ht_for_tsv = ht_for_tsv.filter(hl.is_missing(ht_for_tsv.HL) | (ht_for_tsv.HL > 0))
-    ht_for_tsv.naive_coalesce(100).export(out_tsv)
+    ht_for_tsv.naive_coalesce(300).export(out_tsv)
 
-    logger.info("Writing combined VCF...")
-    # For the VCF output, join FT values by semicolon
-    combined_mt = combined_mt.annotate_entries(
-        FT=hl.str(";").join(hl.array(combined_mt.FT))
-    )
-    hl.export_vcf(combined_mt.naive_coalesce(100), out_vcf, metadata=meta)
+    if not args.skip_vcf:
+        logger.info("Writing combined VCF...")
+        # For the VCF output, join FT values by semicolon
+        combined_mt = combined_mt.annotate_entries(
+            FT=hl.str(";").join(hl.array(combined_mt.FT))
+        )
+        hl.export_vcf(combined_mt.naive_coalesce(300), out_vcf, metadata=meta)
 
 
 
@@ -170,6 +171,9 @@ if __name__ == "__main__":
     )
     p.add_argument(
         '--append-to-existing', type=str, help='Optional: specify absolute path to existing coverage MatrixTable to merge this dataset into.'
+    )
+    p.add_argument(
+        '--skip-vcf', type=str, help='If specified, will skip generation of the VCF (size explodes with sample size).'
     )
 
     args = p.parse_args()
