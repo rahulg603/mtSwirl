@@ -88,20 +88,20 @@ def main(args):  # noqa: D103
     out_mt = f"{output_bucket}/{file_name}.mt"
     out_tsv = f"file://{os.getcwd()}/{file_name}.tsv.bgz"
 
-    combined_mt = combined_mt.repartition(args.n_final_partitions).checkpoint(out_mt, overwrite=args.overwrite)
+    combined_mt = combined_mt.repartition(args.n_final_partitions).checkpoint(out_mt, overwrite=args.overwrite, _read_if_exists=not args.overwrite)
 
     logger.info("Writing trimmed variants table...")
     logger.info("We export missing variants; all others are considered homozygous reference.")
     ht_for_tsv = combined_mt.entries()
     ht_for_tsv = ht_for_tsv.filter(hl.is_missing(ht_for_tsv.HL) | (ht_for_tsv.HL > 0))
-    ht_for_tsv.repartition(50).export(out_tsv)
+    ht_for_tsv.repartition(300).export(out_tsv)
 
     logger.info("Writing combined VCF...")
     # For the VCF output, join FT values by semicolon
     combined_mt = combined_mt.annotate_entries(
         FT=hl.str(";").join(hl.array(combined_mt.FT))
     )
-    hl.export_vcf(combined_mt.repartition(100), out_vcf, metadata=meta)
+    hl.export_vcf(combined_mt.repartition(300), out_vcf, metadata=meta)
 
 
 
