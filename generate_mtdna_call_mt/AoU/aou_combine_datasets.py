@@ -27,6 +27,13 @@ def main(args):
     if args.coverage and args.variants:
         raise ValueError('ERROR: cannot enable both coverage and variants mode.')
 
+    hl.init(tmp_dir=args.temp_dir, log='combine_datasets.log')
+    if int(hl.version().split('-')[0].split('.')[2]) >= 75: # only use this if using hail 0.2.75 or greater
+        logger.info("Setting hail flag to avoid array index out of bounds error...")
+        # Setting this flag isn't generally recommended, but is needed (since at least Hail version 0.2.75) to avoid an array index out of bounds error until changes are made in future versions of Hail
+        # TODO: reassess if this flag is still needed for future versions of Hail
+        hl._set_flags(no_whole_stage_codegen="1")
+
     mt1 = hl.read_matrix_table(args.t1)
 
     if args.coverage:

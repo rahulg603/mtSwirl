@@ -581,6 +581,7 @@ def apply_mito_artifact_filter(mt: hl.MatrixTable, artifact_prone_sites_path: st
                                                       hl.locus('MT',bed.interval.end.position, reference_genome='GRCh37'))).key_by('interval')
     else:
         bed = hl.import_bed(artifact_prone_sites_path)
+    print("Artifact prone sites imported.")
     bed = bed.annotate(target="artifact")
 
     # Create a region annotation containing the interval that the variant overlaps (for SNP will be one position, but will be longer for deletions based on the length of the deletion)
