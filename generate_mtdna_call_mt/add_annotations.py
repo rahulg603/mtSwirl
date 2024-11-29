@@ -2382,23 +2382,27 @@ def main(args):  # noqa: D103
     logger.info("Formatting and writing VCF...")
     rows_ht = mt.rows()
     export_simplified_variants(rows_ht, output_dir)
-    vcf_mt, vcf_meta, vcf_header_file = format_vcf(mt, output_dir, min_hom_threshold, skip_vep=args.fully_skip_vep)
-    hl.export_vcf(
-        vcf_mt,
-        samples_vcf_path,
-        metadata=vcf_meta,
-        append_to_header=vcf_header_file,
-        tabix=True,
-    )  # Full VCF for internal use
-    vcf_variant_ht = vcf_mt.rows()
-    rows_mt = hl.MatrixTable.from_rows_table(vcf_variant_ht).key_cols_by(s="foo")
-    hl.export_vcf(
-        rows_mt,
-        sites_vcf_path,
-        metadata=vcf_meta,
-        append_to_header=vcf_header_file,
-        tabix=True,
-    )  # Sites-only VCF for external use
+
+    if not args.skip_vcf:
+        vcf_mt, vcf_meta, vcf_header_file = format_vcf(mt, output_dir, min_hom_threshold, skip_vep=args.fully_skip_vep)
+        hl.export_vcf(
+            vcf_mt,
+            samples_vcf_path,
+            metadata=vcf_meta,
+            append_to_header=vcf_header_file,
+            tabix=True,
+        )  # Full VCF for internal use
+        vcf_variant_ht = vcf_mt.rows()
+        rows_mt = hl.MatrixTable.from_rows_table(vcf_variant_ht).key_cols_by(s="foo")
+        hl.export_vcf(
+            rows_mt,
+            sites_vcf_path,
+            metadata=vcf_meta,
+            append_to_header=vcf_header_file,
+            tabix=True,
+        )  # Sites-only VCF for external use
+    else:
+        logger.info('Skipping VCF output.')
 
     logger.info("All annotation steps are completed")
 
@@ -2485,6 +2489,9 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         '--allow-strand-bias', action='store_true', help='In some cases, one may want to allow strand bias calls to persist in the final callset.'
+    )
+    parser.add_argument(
+        '--skip-vcf', action='store_true', help='Will skip VCF output. Recommend enabling when working with N > 200k.'
     )
 
     args = parser.parse_args()
