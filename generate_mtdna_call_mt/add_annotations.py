@@ -2089,8 +2089,12 @@ def process_mt_for_flat_file_analysis(mt, skip_vep, allow_gt_fail):
     return ht.key_by('locus', 'alleles', 's'), base_col_set + addl_col_set, base_row_set
 
 
-def process_flat_ht_slim(ht, mt_full, row_keep, col_keep):
+def process_flat_ht_slim(ht, mt_full, row_keep, col_keep, skip_vep):
     mt = mt_full.select_globals()
+
+    if not skip_vep:
+        mt = mt.annotate_rows(ancestral = mt.vep.ancestral, 
+                              most_severe_csq=mt.vep.most_severe_consequence)
 
     # organize column data
     sample_table = mt.cols()
