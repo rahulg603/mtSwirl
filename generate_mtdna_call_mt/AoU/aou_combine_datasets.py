@@ -62,25 +62,29 @@ def main(args):
 
 
     if args.variants:
-        logger.info("Appending new VCF to old VCF database...")
-        col_keep = [] if args.single_sample_analysis else ['batch']
-        combined_mt = append_vcf_to_old(mt1, args.t2, col_keep, 
-                                        args.n_final_partitions, args.temp_dir)
-
-        logger.info("Applying artifact_prone_site filter...")
-        combined_mt = apply_mito_artifact_filter(combined_mt, args.artifact_prone_sites_path, args.artifact_prone_sites_reference)
-
-        logger.info("Writing combined MT...")
+        
         # Set the file names for output files
         output_vcf = re.sub(r"\.mt$", ".vcf.bgz", args.output_mt)
         output_tsv = re.sub(r"\.mt$", ".tsv.bgz", args.output_mt)
 
-        combined_mt = combined_mt.repartition(args.n_final_partitions).checkpoint(args.output_mt, overwrite=args.overwrite)
+        if not args.overwrite and hl.hadoop_exists(f'{args.output_mt}/_SUCCESS'):
+            combined_mt = hl.read_matrix_table(args.output_mt)
+        else:
+            logger.info("Appending new VCF to old VCF database...")
+            col_keep = [] if args.single_sample_analysis else ['batch']
+            combined_mt = append_vcf_to_old(mt1, args.t2, col_keep, 
+                                            args.n_final_partitions, args.temp_dir)
+
+            logger.info("Applying artifact_prone_site filter...")
+            combined_mt = apply_mito_artifact_filter(combined_mt, args.artifact_prone_sites_path, args.artifact_prone_sites_reference)
+
+            logger.info("Writing combined MT...")
+            combined_mt = combined_mt.repartition(args.n_final_partitions).checkpoint(args.output_mt, overwrite=args.overwrite, _read_if_exists=not args.overwrite)
 
         logger.info("Writing trimmed variants table...")
         ht_for_tsv = combined_mt.entries()
         ht_for_tsv = ht_for_tsv.filter(hl.is_missing(ht_for_tsv.HL) | (ht_for_tsv.HL > 0))
-        ht_for_tsv.naive_coalesce(300).export(output_tsv)
+        ht_for_tsv.naive_coalesce(1000).export(output_tsv)
 
         if args.output_vcf:
             logger.info("Writing combined VCF...")
@@ -89,7 +93,7 @@ def main(args):
                 FT=hl.str(";").join(hl.array(combined_mt.FT))
             )
             meta = get_vcf_metadata(args.include_extra_v2_fields)
-            hl.export_vcf(combined_mt.naive_coalesce(300), output_vcf, metadata=meta)
+            hl.export_vcf(combined_mt.naive_coalesce(1000), output_vcf, metadata=meta)
 
 
 if __name__ == "__main__":
