@@ -2353,7 +2353,7 @@ def main(args):  # noqa: D103
     ht_for_output.export(annotated_mt_path.replace('.mt','_processed_flat.tsv.bgz'))
 
     logger.info('Writing slimmed flat file for internal use...')
-    ht_for_output_slim, col_data, row_data = process_flat_ht_slim(ht_for_output, mt_full=mt, row_keep=row_set, col_keep=col_set)
+    ht_for_output_slim, col_data, row_data = process_flat_ht_slim(ht_for_output, mt_full=mt, row_keep=row_set, col_keep=col_set, skip_vep=args.fully_skip_vep)
     ht_for_output_slim.export(annotated_mt_path.replace('.mt','_processed_flat_slim.tsv.bgz'))
     col_data.export(annotated_mt_path.replace('.mt','_processed_flat_slim_sample_data.tsv.bgz'))
     row_data.export(annotated_mt_path.replace('.mt','_processed_flat_slim_variant_data.tsv.bgz'))
