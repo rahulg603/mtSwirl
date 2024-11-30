@@ -2499,7 +2499,7 @@ if __name__ == "__main__":
         '--skip-vcf', action='store_true', help='Will skip VCF output. Recommend enabling when working with N > 200k.'
     )
     parser.add_argument(
-        '--temp-dir', type=str, help='Required temporary directory.'
+        '--temp-dir', type=str, help='Required temporary directory.', required=True
     )
 
     args = parser.parse_args()
