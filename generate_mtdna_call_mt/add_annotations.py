@@ -740,7 +740,7 @@ def add_quality_histograms(input_mt: hl.MatrixTable) -> hl.MatrixTable:
     return input_mt
 
 
-def add_annotations_by_hap_and_pop(input_mt: hl.MatrixTable, output_dir, overwrite) -> hl.MatrixTable:
+def add_annotations_by_hap_and_pop(input_mt: hl.MatrixTable, temp_dir) -> hl.MatrixTable:
     """
     Add variant annotations (such as AC, AN, AF, heteroplasmy histogram, and filtering allele frequency) split by haplogroup and population.
 
@@ -765,7 +765,7 @@ def add_annotations_by_hap_and_pop(input_mt: hl.MatrixTable, output_dir, overwri
     ]
     for_annot = {re.sub("pre_", "", i): standardize_haps(input_mt, i, sorted(list_hap_order)) for i in pre_hap_annotation_labels_1}
     input_mt = input_mt.annotate_rows(**for_annot)
-    input_mt = input_mt.checkpoint(f"{output_dir}/temp3.mt", overwrite=overwrite)
+    input_mt = input_mt.checkpoint(f"{temp_dir}/temp3.mt", overwrite=True)
 
     pre_hap_annotation_labels_2 = [
         "pre_hap_AF_hom",
@@ -776,7 +776,7 @@ def add_annotations_by_hap_and_pop(input_mt: hl.MatrixTable, output_dir, overwri
     ]
     for_annot = {re.sub("pre_", "", i): standardize_haps(input_mt, i, sorted(list_hap_order)) for i in pre_hap_annotation_labels_2}
     input_mt = input_mt.annotate_rows(**for_annot)
-    input_mt = input_mt.checkpoint(f"{output_dir}/temp4.mt", overwrite=overwrite)
+    input_mt = input_mt.checkpoint(f"{temp_dir}/temp4.mt", overwrite=True)
 
     # Get a list of indexes where AC of the haplogroup is greater than 0, then get the list of haplogroups with that index
     input_mt = input_mt.annotate_rows(
@@ -1077,7 +1077,7 @@ def add_filter_annotations(
     input_mt: hl.MatrixTable, 
     vaf_filter_threshold: float = 0.01,
     min_het_threshold: float = 0.10,
-    output_dir: str = ''
+    temp_dir: str = ''
 ) -> hl.MatrixTable:
     """
     Generate histogram for number of individuals with the specified sample-level filter at different heteroplasmy levels.
@@ -1103,7 +1103,7 @@ def add_filter_annotations(
 
     logger.info("Removing low_allele_frac genotypes...")
     input_mt = remove_low_allele_frac_genotypes(input_mt, vaf_filter_threshold)
-    input_mt = input_mt.checkpoint(f"{output_dir}/temp_low_frac.mt", overwrite=args.overwrite)
+    input_mt = input_mt.checkpoint(f"{temp_dir}/temp_low_frac.mt", overwrite=True)
 
     logger.info("Applying indel_stack filter...")
     input_mt = apply_indel_stack_filter(input_mt)
@@ -1112,7 +1112,7 @@ def add_filter_annotations(
         "Filtering genotypes below with heteroplasmy below the min_het_threshold..."
     )
     input_mt = filter_genotypes_below_min_het_threshold(input_mt, min_het_threshold)
-    input_mt = input_mt.checkpoint(f"{output_dir}/temp_het_filt.mt", overwrite=args.overwrite)
+    input_mt = input_mt.checkpoint(f"{temp_dir}/temp_het_filt.mt", overwrite=True)
     
     n_het_below_min_het_threshold = input_mt.aggregate_entries(
         hl.agg.count_where(
@@ -2120,6 +2120,7 @@ def process_flat_ht_slim(ht, mt_full, row_keep, col_keep, skip_vep):
 def main(args):  # noqa: D103
     mt_path = args.mt_path
     output_dir = args.output_dir
+    temp_dir = args.temp_dir
     participant_data = args.participant_data
     vep_results = args.vep_results
     min_hom_threshold = args.min_hom_threshold
@@ -2199,7 +2200,7 @@ def main(args):  # noqa: D103
             mt = add_hap_defining(mt)
 
             mt = mt.checkpoint(
-                f"{output_dir}/prior_to_trna.mt", overwrite=args.overwrite
+                f"{temp_dir}/temp_prior_to_trna.mt", overwrite=True
             )
 
             logger.info("Annotating tRNA predictions...")
@@ -2271,7 +2272,7 @@ def main(args):  # noqa: D103
 
             logger.info("Annotating MT...")
             mt, n_het_below_min_het_threshold = add_filter_annotations(
-                mt, vaf_filter_threshold, min_het_threshold, output_dir
+                mt, vaf_filter_threshold, min_het_threshold, temp_dir
             )
             mt = mt.checkpoint(
                 f"{output_dir}/prior_to_filter_genotypes.mt", overwrite=args.overwrite
@@ -2306,15 +2307,15 @@ def main(args):  # noqa: D103
         # Add variant annotations such as AC, AF, and AN
         mt = mt.annotate_rows(**dict(generate_expressions(mt, min_hom_threshold)))
         # Checkpoint to help avoid Hail errors from large queries
-        mt = mt.checkpoint(f"{output_dir}/temp.mt", overwrite=args.overwrite)
+        mt = mt.checkpoint(f"{temp_dir}/temp.mt", overwrite=True)
         
         mt = add_quality_histograms(mt)
-        mt = mt.checkpoint(f"{output_dir}/temp2.mt", overwrite=args.overwrite)
+        mt = mt.checkpoint(f"{temp_dir}/temp2.mt", overwrite=True)
         
         # After this, filters no longer contain "PASS"
         # FT and FT_LIFT do not contain PASS as of filter_genotypes
         # FT instead contains "GT_PASS"; FT_LIFT can be empty
-        mt = add_annotations_by_hap_and_pop(mt, output_dir=output_dir, overwrite=args.overwrite)
+        mt = add_annotations_by_hap_and_pop(mt, temp_dir=temp_dir)
         
         mt = add_descriptions(
             mt, min_hom_threshold, vaf_filter_threshold, min_het_threshold
@@ -2496,6 +2497,9 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         '--skip-vcf', action='store_true', help='Will skip VCF output. Recommend enabling when working with N > 200k.'
+    )
+    parser.add_argument(
+        '--temp-dir', type=str, help='Required temporary directory.'
     )
 
     args = parser.parse_args()
