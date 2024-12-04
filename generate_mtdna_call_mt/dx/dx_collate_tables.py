@@ -327,6 +327,8 @@ def main(pipeline_output_folder, vcf_suffix, coverage_suffix, mtstats_suffix, yi
     hl.init(sc=sc, tmp_dir=f'dnax://{my_database}/tmp2/')
     hl._set_flags(no_whole_stage_codegen='1')
     skip_batch_split = skip_batch.split(',')
+    if skip_batch_split == ['']:
+        skip_batch_split = None
 
     # download mito pipeline data
     print(f'{datetime.now().strftime("%H:%M:%S")}: Finding all relevant data objects...')
@@ -355,13 +357,14 @@ def main(pipeline_output_folder, vcf_suffix, coverage_suffix, mtstats_suffix, yi
     # remove any batches to split
     prefilt = downloaded_files.shape[0]
     print(f'{datetime.now().strftime("%H:%M:%S")}: Skipping {str(len(skip_batch_split))} batches...')
-    print(f'{datetime.now().strftime("%H:%M:%S")}: Removing {", ".join(skip_batch_split)}...')
-    print(f'{datetime.now().strftime("%H:%M:%S")}: Starting with {str(prefilt)} batches.')
-    downloaded_files = downloaded_files[~downloaded_files.batch.isin(skip_batch_split)]
-    postfilt = downloaded_files.shape[0]
-    print(f'{datetime.now().strftime("%H:%M:%S")}: After filtering, {str(postfilt)} batches remain.')
-    if (prefilt - postfilt) != len(skip_batch_split):
-        raise ValueError('ERROR: the number of batches dropped did not match the length of --skip-batch.')
+    if len(skip_batch_split) > 0:
+        print(f'{datetime.now().strftime("%H:%M:%S")}: Removing {", ".join(skip_batch_split)}...')
+        print(f'{datetime.now().strftime("%H:%M:%S")}: Starting with {str(prefilt)} batches.')
+        downloaded_files = downloaded_files[~downloaded_files.batch.isin(skip_batch_split)]
+        postfilt = downloaded_files.shape[0]
+        print(f'{datetime.now().strftime("%H:%M:%S")}: After filtering, {str(postfilt)} batches remain.')
+        if (prefilt - postfilt) != len(skip_batch_split):
+            raise ValueError('ERROR: the number of batches dropped did not match the length of --skip-batch.')
 
     # checks on downloaded data
     print(f'{datetime.now().strftime("%H:%M:%S")}: Checking file paths...')
