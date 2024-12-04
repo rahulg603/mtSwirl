@@ -356,7 +356,7 @@ def main(pipeline_output_folder, vcf_suffix, coverage_suffix, mtstats_suffix, yi
 
     # remove any batches to split
     prefilt = downloaded_files.shape[0]
-    if skip_batch_split is None:
+    if skip_batch_split is not None:
         print(f'{datetime.now().strftime("%H:%M:%S")}: Skipping {str(len(skip_batch_split))} batches...')
         print(f'{datetime.now().strftime("%H:%M:%S")}: Removing {", ".join(skip_batch_split)}...')
         print(f'{datetime.now().strftime("%H:%M:%S")}: Starting with {str(prefilt)} batches.')
