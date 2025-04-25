@@ -8,6 +8,8 @@ import sys
 import sys, os
 sys.path.append('/home/jupyter/')
 
+hl.init(log='annotations_logging.log')
+
 from collections import Counter
 from textwrap import dedent
 
@@ -22,6 +24,8 @@ from gnomad_mitochondria.pipeline.annotation_descriptions import (
     add_descriptions,
     adjust_descriptions,
 )
+
+from merging_constants import *
 
 # Github repo locations for imports:
 # gnomad: https://github.com/broadinstitute/gnomad_methods
@@ -43,13 +47,6 @@ RESOURCES = {
     "pon_mt_trna": f"gs://{RESOURCE_PATH}/trna_predictions/pon_mt_trna_predictions_08_27_2020.txt",
     "mitotip": f"gs://{RESOURCE_PATH}/trna_predictions/mitotip_scores_08_27_2020.txt",
 }
-
-LIFTOVERFILTERS = set(['NoTarget','MismatchedRefAllele','IndelStraddlesMultipleIntevals'])
-CUSTOMLIFTOVERFILTERS = set(['FailedPicardLiftoverVcf', 'InsertionSharesForceCalledDeletion', 'InsertionSharesForceCalledInsertion',
-                             'AddGRCh38RefDeleToRefSiteIns', 'ComplexSwapField', 'NewInsertionHaplotype',
-                             'SwapFirstAlleleIndel', 'ReplaceInternalBaseDeletion', 'FancyFieldInversion',
-                             'DeletionSpannedHomoplasmicInsertion', 'LiftoverSuccessEntrySwap', 'ForceCalledHomoplasmy',
-                             'LeftShiftedIndel', 'FailedDuplicateVariant'])
 
 
 logging.basicConfig(
@@ -743,7 +740,7 @@ def add_quality_histograms(input_mt: hl.MatrixTable) -> hl.MatrixTable:
     return input_mt
 
 
-def add_annotations_by_hap_and_pop(input_mt: hl.MatrixTable, output_dir, overwrite) -> hl.MatrixTable:
+def add_annotations_by_hap_and_pop(input_mt: hl.MatrixTable, temp_dir) -> hl.MatrixTable:
     """
     Add variant annotations (such as AC, AN, AF, heteroplasmy histogram, and filtering allele frequency) split by haplogroup and population.
 
@@ -768,7 +765,7 @@ def add_annotations_by_hap_and_pop(input_mt: hl.MatrixTable, output_dir, overwri
     ]
     for_annot = {re.sub("pre_", "", i): standardize_haps(input_mt, i, sorted(list_hap_order)) for i in pre_hap_annotation_labels_1}
     input_mt = input_mt.annotate_rows(**for_annot)
-    input_mt = input_mt.checkpoint(f"{output_dir}/temp3.mt", overwrite=overwrite)
+    input_mt = input_mt.checkpoint(f"{temp_dir}/temp3.mt", overwrite=True)
 
     pre_hap_annotation_labels_2 = [
         "pre_hap_AF_hom",
@@ -779,7 +776,7 @@ def add_annotations_by_hap_and_pop(input_mt: hl.MatrixTable, output_dir, overwri
     ]
     for_annot = {re.sub("pre_", "", i): standardize_haps(input_mt, i, sorted(list_hap_order)) for i in pre_hap_annotation_labels_2}
     input_mt = input_mt.annotate_rows(**for_annot)
-    input_mt = input_mt.checkpoint(f"{output_dir}/temp4.mt", overwrite=overwrite)
+    input_mt = input_mt.checkpoint(f"{temp_dir}/temp4.mt", overwrite=True)
 
     # Get a list of indexes where AC of the haplogroup is greater than 0, then get the list of haplogroups with that index
     input_mt = input_mt.annotate_rows(
@@ -1077,9 +1074,10 @@ def format_filters(mt, row_f = ['filters'], entry_f = ['FT','FT_LIFT']):
 
 
 def add_filter_annotations(
-    input_mt: hl.MatrixTable,
+    input_mt: hl.MatrixTable, 
     vaf_filter_threshold: float = 0.01,
     min_het_threshold: float = 0.10,
+    temp_dir: str = ''
 ) -> hl.MatrixTable:
     """
     Generate histogram for number of individuals with the specified sample-level filter at different heteroplasmy levels.
@@ -1105,6 +1103,7 @@ def add_filter_annotations(
 
     logger.info("Removing low_allele_frac genotypes...")
     input_mt = remove_low_allele_frac_genotypes(input_mt, vaf_filter_threshold)
+    input_mt = input_mt.checkpoint(f"{temp_dir}/temp_low_frac.mt", overwrite=True)
 
     logger.info("Applying indel_stack filter...")
     input_mt = apply_indel_stack_filter(input_mt)
@@ -1113,6 +1112,8 @@ def add_filter_annotations(
         "Filtering genotypes below with heteroplasmy below the min_het_threshold..."
     )
     input_mt = filter_genotypes_below_min_het_threshold(input_mt, min_het_threshold)
+    input_mt = input_mt.checkpoint(f"{temp_dir}/temp_het_filt.mt", overwrite=True)
+    
     n_het_below_min_het_threshold = input_mt.aggregate_entries(
         hl.agg.count_where(
             hl.str(input_mt.FT).contains("heteroplasmy_below_min_het_threshold")
@@ -2028,12 +2029,13 @@ def process_mt_for_flat_file_analysis(mt, skip_vep, allow_gt_fail):
         base_row_set = base_row_set + ['ancestral', 'most_severe_csq']
     base_col_set = ['batch']
     base_col_set = [x for x in base_col_set if x in mt.col]
+    addl_col_set = ['contamination', 'freemix_percentage', 
+                    'contam_high_het', 'freemix_percentage_imp',
+                    'major_haplogroup', 'hap', 'wgs_median_coverage',
+                    'mt_mean_coverage', 'mito_cn', 'age', 'pop', 
+                    'over_85_mean', 'over_85_count']
     mt = mt.select_globals().select_rows(*base_row_set
-                           ).select_cols(*base_col_set, 'contamination', 'freemix_percentage', 
-                                         'contam_high_het', 'freemix_percentage_imp',
-                                         'major_haplogroup', 'hap', 'wgs_median_coverage',
-                                         'mt_mean_coverage', 'mito_cn', 'age', 'pop', 
-                                         'over_85_mean', 'over_85_count')
+                           ).select_cols(*base_col_set, *addl_col_set)
     ht = mt.filter_entries(hl.is_missing(mt.HL) | (mt.HL > 0)).entries()
 
     # there should not be any empty filters
@@ -2057,12 +2059,17 @@ def process_mt_for_flat_file_analysis(mt, skip_vep, allow_gt_fail):
         raise ValueError('Any missing heteroplasmies at DP > 100 should not be passing in terms of FT.')
 
     ht = ht.annotate(AD_ref = ht.AD[0], AD_alt = ht.AD[1], FT = ht.FT.union(ht.filters)).drop('AD','filters')
-    ht = ht.annotate(F2R1_ref = ht.F2R1[0], F2R1_alt = ht.F2R1[1], F1R2_ref = ht.F1R2[0], F1R2_alt = ht.F1R2[1]).drop('F2R1','F1R2')
+    if 'F1R2' in ht.row and 'F2R1' in ht.row:
+        ht = ht.annotate(F2R1_ref = ht.F2R1[0], F2R1_alt = ht.F2R1[1], F1R2_ref = ht.F1R2[0], F1R2_alt = ht.F1R2[1]).drop('F2R1','F1R2')
+    if 'RPA' in ht.row:
+        ht = ht.annotate(RPA_ref = ht.RPA[0], RPA_alt = ht.RPA[1]).drop('RPA')
     if 'AS_SB_TABLE' in ht.row:
-        ht = ht.annotate(FWD_ref = hl.if_else(hl.is_defined(ht.AS_SB_TABLE), hl.int32(ht.AS_SB_TABLE[0].split(',')[0]), hl.missing(hl.tint32)),
-                         FWD_alt = hl.if_else(hl.is_defined(ht.AS_SB_TABLE), hl.int32(ht.AS_SB_TABLE[1].split(',')[0]), hl.missing(hl.tint32)),
-                         REV_ref = hl.if_else(hl.is_defined(ht.AS_SB_TABLE), hl.int32(ht.AS_SB_TABLE[0].split(',')[1]), hl.missing(hl.tint32)),
-                         REV_alt = hl.if_else(hl.is_defined(ht.AS_SB_TABLE), hl.int32(ht.AS_SB_TABLE[1].split(',')[1]), hl.missing(hl.tint32)))
+        ht = ht.annotate(AS_SB_SPLIT = ht.AS_SB_TABLE.split('\\|'))
+        ht = ht.annotate(FWD_SB_ref = hl.if_else(hl.is_defined(ht.AS_SB_TABLE), hl.int32(ht.AS_SB_SPLIT[0].split(',')[0]), hl.missing(hl.tint32)),
+                         FWD_SB_alt = hl.if_else(hl.is_defined(ht.AS_SB_TABLE), hl.int32(ht.AS_SB_SPLIT[1].split(',')[0]), hl.missing(hl.tint32)),
+                         REV_SB_ref = hl.if_else(hl.is_defined(ht.AS_SB_TABLE), hl.int32(ht.AS_SB_SPLIT[0].split(',')[1]), hl.missing(hl.tint32)),
+                         REV_SB_alt = hl.if_else(hl.is_defined(ht.AS_SB_TABLE), hl.int32(ht.AS_SB_SPLIT[1].split(',')[1]), hl.missing(hl.tint32)))
+        ht = ht.drop('AS_SB_TABLE', 'AS_SB_SPLIT')
     ht = ht.annotate(FT = ht.FT.difference({'PASS'}), FT_LIFT = ht.FT_LIFT.difference({'PASS'}))
     
     # fail_gt should be a subset of missing_call
@@ -2079,12 +2086,41 @@ def process_mt_for_flat_file_analysis(mt, skip_vep, allow_gt_fail):
     ht = ht.annotate(**{x: make_comma_delim(ht[x]) for x in ['FT','FT_LIFT','OriginalSelfRefAlleles','alleles','rsid']})
     ht = ht.annotate(locus = ht.locus.contig.replace('MT','chrM') + ':' + hl.str(ht.locus.position))
     ht = ht.annotate(variant = ht.locus + ':' + ht.alleles).key_by('locus','alleles','s')
-    return ht.key_by('locus', 'alleles', 's')
+    return ht.key_by('locus', 'alleles', 's'), base_col_set + addl_col_set, base_row_set
+
+
+def process_flat_ht_slim(ht, mt_full, row_keep, col_keep, skip_vep):
+    mt = mt_full.select_globals()
+
+    if not skip_vep:
+        mt = mt.annotate_rows(ancestral = mt.vep.ancestral, 
+                              most_severe_csq=mt.vep.most_severe_consequence)
+
+    # organize column data
+    sample_table = mt.cols()
+    sample_table = sample_table.select(*[x for x in col_keep if x not in sample_table.key])
+
+    # organize row data
+    row_table = mt.rows()
+    row_table = row_table.select(*[x for x in row_keep if x not in row_table.key]).drop('filters')
+
+    # organize entry data
+    cols_to_keep = [x for x in ht.row if x not in sample_table.row and x not in row_table.row and x not in ht.key]
+    entry_table = ht.select(*cols_to_keep)
+
+    # entry to drop
+    entry_drop = ['F2R1_ref', 'F2R1_alt', 'F1R2_ref', 'F1R2_alt',
+                  'FWD_SB_ref', 'FWD_SB_alt', 'REV_SB_ref', 'REV_SB_alt',
+                  'RPA_ref', 'RPA_alt', 'MPOS', 'STR', 'STRQ']
+    entry_table = entry_table.drop(*[x for x in entry_drop if x in entry_table.row])
+
+    return entry_table, sample_table, row_table
 
 
 def main(args):  # noqa: D103
     mt_path = args.mt_path
     output_dir = args.output_dir
+    temp_dir = args.temp_dir
     participant_data = args.participant_data
     vep_results = args.vep_results
     min_hom_threshold = args.min_hom_threshold
@@ -2146,83 +2182,101 @@ def main(args):  # noqa: D103
             logger.info("INTERMEDIATE MT NOT FOUND.")
 
     if run_full:
-        logger.info("Adding genotype annotation...")
-        # NOTE: on import, there are no instances of hl.len(FT) == 0. Missing FT implies no HL measured with confidence.
-        mt = add_genotype(mt_path, min_hom_threshold)
-
-        logger.info("Moving Liftover FT fields to a new entry...")
-        mt = modify_ft_liftover(mt)
-
-        logger.info("Adding annotations from Terra...")
-        mt = add_terra_metadata(mt, participant_data)
-
-        logger.info("Annotating haplogroup-defining variants...")
-        mt = add_hap_defining(mt)
-
-        logger.info("Annotating tRNA predictions...")
-        mt = add_trna_predictions(mt, avoid_fasta_workaround)
-
-        # If 'subset-to-gnomad-release' is set, 'age' and 'pop' are added by the add_gnomad_metadata function.
-        # If 'subset-to-gnomad-release' is not set, the user should include an 'age' and 'pop' column in the file supplied to `participant-data`.
-        if gnomad_subset:
-            logger.info("Adding gnomAD metadata sample annotations...")
-            mt = add_gnomad_metadata(mt)
+        if not args.overwrite and hl.hadoop_exists(f"{output_dir}/prior_to_sample_filt.mt"):
+            mt = hl.read_matrix_table(f"{output_dir}/prior_to_sample_filt.mt")
+        
         else:
-            logger.info("Checking for and adding age and pop annotations...")
-            mt = add_age_and_pop(mt, participant_data)
+            logger.info("Adding genotype annotation...")
+            # NOTE: on import, there are no instances of hl.len(FT) == 0. Missing FT implies no HL measured with confidence.
+            mt = add_genotype(mt_path, min_hom_threshold)
 
-        logger.info("Adding variant context annotations...")
-        mt = add_variant_context(mt)
+            logger.info("Moving Liftover FT fields to a new entry...")
+            mt = modify_ft_liftover(mt)
 
-        # If specified, subet to only the gnomAD samples in the current release
-        if gnomad_subset:
-            logger.warning("Subsetting results to gnomAD release samples...")
+            logger.info("Adding annotations from Terra...")
+            mt = add_terra_metadata(mt, participant_data)
 
-            # Subset to release samples and filter out rows that no longer have at least one alt call
-            mt = mt.filter_cols(mt.release)  # Filter to cols where release is true
-            mt = mt.filter_rows(hl.agg.any(mt.HL > 0))
+            logger.info("Annotating haplogroup-defining variants...")
+            mt = add_hap_defining(mt)
 
-        mt = mt.checkpoint(
-            f"{output_dir}/prior_to_sample_filt.mt", overwrite=args.overwrite
-        )
+            mt = mt.checkpoint(
+                f"{temp_dir}/temp_prior_to_trna.mt", overwrite=True
+            )
 
-        logger.info('Removing samples which show overlapping homoplasmies in self-reference construction...')
-        mt, n_removed_overlap = filter_by_hom_overlap(
-            mt, keep_all_samples, args.sample_stats
-        )
+            logger.info("Annotating tRNA predictions...")
+            mt = add_trna_predictions(mt, avoid_fasta_workaround)
 
-        logger.info("Checking for samples with low/high mitochondrial copy number...")
-        mt, n_removed_below_cn, n_removed_above_cn = filter_by_copy_number(
-            mt, keep_all_samples, max_cn
-        )
+            # If 'subset-to-gnomad-release' is set, 'age' and 'pop' are added by the add_gnomad_metadata function.
+            # If 'subset-to-gnomad-release' is not set, the user should include an 'age' and 'pop' column in the file supplied to `participant-data`.
+            if gnomad_subset:
+                logger.info("Adding gnomAD metadata sample annotations...")
+                mt = add_gnomad_metadata(mt)
+            else:
+                logger.info("Checking for and adding age and pop annotations...")
+                mt = add_age_and_pop(mt, participant_data)
 
-        logger.info("Checking for contaminated samples...")
-        mt, n_contaminated = filter_by_contamination(mt, output_dir, keep_all_samples)
+            logger.info("Adding variant context annotations...")
+            mt = add_variant_context(mt)
 
-        logger.info("Switch build and checkpoint...")
-        # Switch build 37 to build 38
-        mt = mt.key_rows_by(
-            locus=hl.locus("chrM", mt.locus.position, reference_genome="GRCh38"),
-            alleles=mt.alleles,
-        )
-        # NOTE: at this stage there should still be no instances of hl.len(FT) == 0. Missing FT implies HL not called.
-        # NOTE: all missing HL entries have missing FT. These are entries with low DP so cannot be called hom ref.
-        mt = mt.checkpoint(f"{output_dir}/prior_to_vep.mt", overwrite=args.overwrite)
+            # If specified, subet to only the gnomAD samples in the current release
+            if gnomad_subset:
+                logger.warning("Subsetting results to gnomAD release samples...")
 
-        if not args.fully_skip_vep:
-            logger.info("Adding vep annotations...")
-            mt = add_vep(mt, run_vep, vep_results)
+                # Subset to release samples and filter out rows that no longer have at least one alt call
+                mt = mt.filter_cols(mt.release)  # Filter to cols where release is true
+                mt = mt.filter_rows(hl.agg.any(mt.HL > 0))
 
-        logger.info("Adding dbsnp annotations...")
-        mt = add_rsids(mt, args.band_aid_dbsnp_path_fix)
+            mt = mt.checkpoint(
+                f"{output_dir}/prior_to_sample_filt.mt", overwrite=args.overwrite
+            )
 
-        logger.info("Annotating MT...")
-        mt, n_het_below_min_het_threshold = add_filter_annotations(
-            mt, vaf_filter_threshold, min_het_threshold
-        )
-        mt = mt.checkpoint(
-            f"{output_dir}/prior_to_filter_genotypes.mt", overwrite=args.overwrite
-        )
+
+        if not args.overwrite and hl.hadoop_exists(f"{output_dir}/prior_to_vep.mt"):
+            mt = hl.read_matrix_table(f"{output_dir}/prior_to_vep.mt")
+        
+        else:
+            logger.info('Removing samples which show overlapping homoplasmies in self-reference construction...')
+            mt, n_removed_overlap = filter_by_hom_overlap(
+                mt, keep_all_samples, args.sample_stats
+            )
+
+            logger.info("Checking for samples with low/high mitochondrial copy number...")
+            mt, n_removed_below_cn, n_removed_above_cn = filter_by_copy_number(
+                mt, keep_all_samples, max_cn
+            )
+
+            logger.info("Checking for contaminated samples...")
+            mt, n_contaminated = filter_by_contamination(mt, output_dir, keep_all_samples)
+
+            logger.info("Switch build and checkpoint...")
+            # Switch build 37 to build 38
+            mt = mt.key_rows_by(
+                locus=hl.locus("chrM", mt.locus.position, reference_genome="GRCh38"),
+                alleles=mt.alleles,
+            )
+            # NOTE: at this stage there should still be no instances of hl.len(FT) == 0. Missing FT implies HL not called.
+            # NOTE: all missing HL entries have missing FT. These are entries with low DP so cannot be called hom ref.
+            mt = mt.checkpoint(f"{output_dir}/prior_to_vep.mt", overwrite=args.overwrite)
+
+
+        if not args.overwrite and hl.hadoop_exists(f"{output_dir}/prior_to_filter_genotypes.mt"):
+            mt = hl.read_matrix_table(f"{output_dir}/prior_to_filter_genotypes.mt")
+        
+        else:
+            if not args.fully_skip_vep:
+                logger.info("Adding vep annotations...")
+                mt = add_vep(mt, run_vep, vep_results)
+
+            logger.info("Adding dbsnp annotations...")
+            mt = add_rsids(mt, args.band_aid_dbsnp_path_fix)
+
+            logger.info("Annotating MT...")
+            mt, n_het_below_min_het_threshold = add_filter_annotations(
+                mt, vaf_filter_threshold, min_het_threshold, temp_dir
+            )
+            mt = mt.checkpoint(
+                f"{output_dir}/prior_to_filter_genotypes.mt", overwrite=args.overwrite
+            )
 
         # Some checks
         # NOTE: at this stage there should still be no instances of hl.len(FT) == 0. Missing FT implies HL not called.
@@ -2253,15 +2307,15 @@ def main(args):  # noqa: D103
         # Add variant annotations such as AC, AF, and AN
         mt = mt.annotate_rows(**dict(generate_expressions(mt, min_hom_threshold)))
         # Checkpoint to help avoid Hail errors from large queries
-        mt = mt.checkpoint(f"{output_dir}/temp.mt", overwrite=args.overwrite)
+        mt = mt.checkpoint(f"{temp_dir}/temp.mt", overwrite=True)
         
         mt = add_quality_histograms(mt)
-        mt = mt.checkpoint(f"{output_dir}/temp2.mt", overwrite=args.overwrite)
+        mt = mt.checkpoint(f"{temp_dir}/temp2.mt", overwrite=True)
         
         # After this, filters no longer contain "PASS"
         # FT and FT_LIFT do not contain PASS as of filter_genotypes
         # FT instead contains "GT_PASS"; FT_LIFT can be empty
-        mt = add_annotations_by_hap_and_pop(mt, output_dir=output_dir, overwrite=args.overwrite)
+        mt = add_annotations_by_hap_and_pop(mt, temp_dir=temp_dir)
         
         mt = add_descriptions(
             mt, min_hom_threshold, vaf_filter_threshold, min_het_threshold
@@ -2296,8 +2350,22 @@ def main(args):  # noqa: D103
         )
 
     logger.info('Writing variants flat file for internal use...')
-    ht_for_output = process_mt_for_flat_file_analysis(mt, args.fully_skip_vep, args.allow_strand_bias)
+    ht_for_output, col_set, row_set = process_mt_for_flat_file_analysis(mt, args.fully_skip_vep, args.allow_strand_bias)
     ht_for_output.export(annotated_mt_path.replace('.mt','_processed_flat.tsv.bgz'))
+
+    logger.info('Writing slimmed flat file for internal use...')
+    ht_for_output_slim, col_data, row_data = process_flat_ht_slim(ht_for_output, mt_full=mt, row_keep=row_set, col_keep=col_set, skip_vep=args.fully_skip_vep)
+    ht_for_output_slim.export(annotated_mt_path.replace('.mt','_processed_flat_slim.tsv.bgz'))
+    col_data.export(annotated_mt_path.replace('.mt','_processed_flat_slim_sample_data.tsv.bgz'))
+    row_data.export(annotated_mt_path.replace('.mt','_processed_flat_slim_variant_data.tsv.bgz'))
+
+    logger.info('Generate non-missing HL file for internal use...')
+    ht_per_var_N = ht_for_output_slim.group_by(ht_for_output_slim.locus, ht_for_output_slim.alleles
+                                    ).aggregate(N_failed = hl.agg.count_where(hl.is_missing(ht_for_output_slim.HL)), 
+                                                N_variant_pass = hl.agg.count_where(~hl.is_missing(ht_for_output_slim.HL)))
+    ht_for_output_slim_def = ht_for_output_slim.filter(hl.is_defined(ht_for_output_slim.HL))
+    ht_per_var_N.export(annotated_mt_path.replace('.mt','_processed_flat_slim_per_variant_N_missing.tsv.bgz'))
+    ht_for_output_slim_def.export(annotated_mt_path.replace('.mt','_processed_flat_slim_qc_pass_HL_only.tsv.bgz'))
 
     logger.info("Writing ht...")
     variant_ht = mt.rows()
@@ -2310,7 +2378,7 @@ def main(args):  # noqa: D103
 
     logger.info("Writing sample annotations...")
     mt = add_sample_annotations(mt, min_hom_threshold)
-    sample_ht = mt.cols()
+    sample_ht = mt.cols().persist()
     sample_ht.group_by(sample_ht.hap).aggregate(n=hl.agg.count()).export(
         f"{output_dir}/haplogroup_counts.txt"
     )  # Counts of top level haplogroups
@@ -2319,23 +2387,27 @@ def main(args):  # noqa: D103
     logger.info("Formatting and writing VCF...")
     rows_ht = mt.rows()
     export_simplified_variants(rows_ht, output_dir)
-    vcf_mt, vcf_meta, vcf_header_file = format_vcf(mt, output_dir, min_hom_threshold, skip_vep=args.fully_skip_vep)
-    hl.export_vcf(
-        vcf_mt,
-        samples_vcf_path,
-        metadata=vcf_meta,
-        append_to_header=vcf_header_file,
-        tabix=True,
-    )  # Full VCF for internal use
-    vcf_variant_ht = vcf_mt.rows()
-    rows_mt = hl.MatrixTable.from_rows_table(vcf_variant_ht).key_cols_by(s="foo")
-    hl.export_vcf(
-        rows_mt,
-        sites_vcf_path,
-        metadata=vcf_meta,
-        append_to_header=vcf_header_file,
-        tabix=True,
-    )  # Sites-only VCF for external use
+
+    if not args.skip_vcf:
+        vcf_mt, vcf_meta, vcf_header_file = format_vcf(mt, output_dir, min_hom_threshold, skip_vep=args.fully_skip_vep)
+        hl.export_vcf(
+            vcf_mt,
+            samples_vcf_path,
+            metadata=vcf_meta,
+            append_to_header=vcf_header_file,
+            tabix=True,
+        )  # Full VCF for internal use
+        vcf_variant_ht = vcf_mt.rows()
+        rows_mt = hl.MatrixTable.from_rows_table(vcf_variant_ht).key_cols_by(s="foo")
+        hl.export_vcf(
+            rows_mt,
+            sites_vcf_path,
+            metadata=vcf_meta,
+            append_to_header=vcf_header_file,
+            tabix=True,
+        )  # Sites-only VCF for external use
+    else:
+        logger.info('Skipping VCF output.')
 
     logger.info("All annotation steps are completed")
 
@@ -2422,6 +2494,12 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         '--allow-strand-bias', action='store_true', help='In some cases, one may want to allow strand bias calls to persist in the final callset.'
+    )
+    parser.add_argument(
+        '--skip-vcf', action='store_true', help='Will skip VCF output. Recommend enabling when working with N > 200k.'
+    )
+    parser.add_argument(
+        '--temp-dir', type=str, help='Required temporary directory.', required=True
     )
 
     args = parser.parse_args()
