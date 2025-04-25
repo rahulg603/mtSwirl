@@ -86,7 +86,6 @@ workflow AlignAndCallR1 {
         suffix = '.nuc',
         mt_interval_list = nuc_interval_list,
 
-        compress = compress_output_vcf,
         m2_extra_args = select_first([m2_extra_args, ""]),
 
         max_alt_allele_count = 4,
