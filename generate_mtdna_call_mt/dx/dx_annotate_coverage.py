@@ -49,6 +49,7 @@ def main(args):  # noqa: D103
         "Reading in individual coverage files as matrix tables and adding to a list of matrix tables..."
     )
     paths = hl.read_table(input_ht)
+    paths = paths.annotate(coverage = 'file://' + paths.coverage)
 
     cov_mt = coverage_merging(paths=paths, num_merges=num_merges, chunk_size=chunk_size, check_from_disk=check_from_disk, 
                               n_read_partitions=args.n_read_partitions, n_final_partitions=args.n_final_partitions, 
