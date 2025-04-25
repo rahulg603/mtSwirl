@@ -318,7 +318,7 @@ def compute_nuc_coverage(df, column_name):
 
 
 def main(pipeline_output_folder, vcf_suffix, coverage_suffix, mtstats_suffix, yield_suffix, idxstats_suffix, qc_stats_folder, qc_suffix,
-         file_paths_table_output, per_sample_stats_output, dx_init, avoid_filtering_idxstats_chr, unified_prefix):
+         file_paths_table_output, per_sample_stats_output, dx_init, avoid_filtering_idxstats_chr, unified_prefix, max_threads, skip_batch):
 
     # start SQL session
     my_database = dxpy.find_one_data_object(name=dx_init.lower())["id"]
@@ -326,6 +326,9 @@ def main(pipeline_output_folder, vcf_suffix, coverage_suffix, mtstats_suffix, yi
     spark = pyspark.sql.SparkSession(sc)
     hl.init(sc=sc, tmp_dir=f'dnax://{my_database}/tmp2/')
     hl._set_flags(no_whole_stage_codegen='1')
+    skip_batch_split = skip_batch.split(',')
+    if skip_batch_split == ['']:
+        skip_batch_split = None
 
     # download mito pipeline data
     print(f'{datetime.now().strftime("%H:%M:%S")}: Finding all relevant data objects...')
@@ -351,6 +354,18 @@ def main(pipeline_output_folder, vcf_suffix, coverage_suffix, mtstats_suffix, yi
     print(f'{datetime.now().strftime("%H:%M:%S")}: Obtaining paths...')
     downloaded_files = produce_fuse_file_table(data_dict, {'vcf':vcf_suffix, 'coverage':coverage_suffix, 'stats':mtstats_suffix, 'yield':yield_suffix, 'idxstats':idxstats_suffix})
 
+    # remove any batches to split
+    prefilt = downloaded_files.shape[0]
+    if skip_batch_split is not None:
+        print(f'{datetime.now().strftime("%H:%M:%S")}: Skipping {str(len(skip_batch_split))} batches...')
+        print(f'{datetime.now().strftime("%H:%M:%S")}: Removing {", ".join(skip_batch_split)}...')
+        print(f'{datetime.now().strftime("%H:%M:%S")}: Starting with {str(prefilt)} batches.')
+        downloaded_files = downloaded_files[~downloaded_files.batch.isin(skip_batch_split)]
+        postfilt = downloaded_files.shape[0]
+        print(f'{datetime.now().strftime("%H:%M:%S")}: After filtering, {str(postfilt)} batches remain.')
+        if (prefilt - postfilt) != len(skip_batch_split):
+            raise ValueError('ERROR: the number of batches dropped did not match the length of --skip-batch.')
+
     # checks on downloaded data
     print(f'{datetime.now().strftime("%H:%M:%S")}: Checking file paths...')
     per_row_un = downloaded_files.apply(lambda x: x.apply(lambda y: os.path.basename(os.path.dirname(y))).unique(), 1)
@@ -368,14 +383,19 @@ def main(pipeline_output_folder, vcf_suffix, coverage_suffix, mtstats_suffix, yi
     # import stats and qc and merge all into table
     print(f'{datetime.now().strftime("%H:%M:%S")}: Importing all statistics...')
     print(f'{datetime.now().strftime("%H:%M:%S")}: Importing run statistics...')
-    stats_table = import_and_cat_tables(downloaded_files, 'batch', 'stats', 'batch', enforce_nonmiss=False)
+    stats_table = import_and_cat_tables(downloaded_files, 'batch', 'stats', 'batch', enforce_nonmiss=False, max_threads=max_threads)
+
+    print(f'{datetime.now().strftime("%H:%M:%S")}: Checking run statistics for duplicates...')
+    if len(stats_table.s.unique()) != len(stats_table.s):
+        raise ValueError('ERROR: run statistics contain duplicated sample names. This implies that batch names were not duplicated, but samples were rerun successfully.')
+
     print(f'{datetime.now().strftime("%H:%M:%S")}: Importing yield statistics...')
-    yield_table = import_and_cat_tables(downloaded_files, 'batch', 'yield', 'batch', enforce_nonmiss=False)
+    yield_table = import_and_cat_tables(downloaded_files, 'batch', 'yield', 'batch', enforce_nonmiss=False, max_threads=max_threads)
     print(f'{datetime.now().strftime("%H:%M:%S")}: Importing idxstats statistics...')
     if avoid_filtering_idxstats_chr:
-        idxstats_table = import_and_cat_tables(downloaded_files, 'batch', 'idxstats', 'batch', enforce_nonmiss=False)
+        idxstats_table = import_and_cat_tables(downloaded_files, 'batch', 'idxstats', 'batch', enforce_nonmiss=False, max_threads=max_threads)
     else:
-        idxstats_table = import_and_cat_tables(downloaded_files, 'batch', 'idxstats', 'batch', enforce_nonmiss=False, filter_chr=AUTOSOMES)
+        idxstats_table = import_and_cat_tables(downloaded_files, 'batch', 'idxstats', 'batch', enforce_nonmiss=False, filter_chr=AUTOSOMES, max_threads=max_threads)
 
     # produce munged idxstats table
     idxstats_summary = idxstats_table.groupby(idxstats_table['s']).agg(
@@ -391,7 +411,7 @@ def main(pipeline_output_folder, vcf_suffix, coverage_suffix, mtstats_suffix, yi
     else:
         middle_id_item = list(middle_id_item)[0]
     downloaded_qc_files['s_mod'] = downloaded_qc_files.s.str.split('_').map(lambda x: x[0] + '_' + middle_id_item + '_' + x[2] + '_' + x[3])
-    qc_table = import_and_cat_tables(downloaded_qc_files, 's_mod', 'qc', 's', append_ids_and_t=True, filter_by=list(stats_table['s']))
+    qc_table = import_and_cat_tables(downloaded_qc_files, 's_mod', 'qc', 's', append_ids_and_t=True, filter_by=list(stats_table['s']), max_threads=max_threads)
     final_stats_table = stats_table.merge(qc_table, how='outer', on='s'
                                   ).merge(yield_table, how='inner', on=['s','batch']
                                   ).merge(idxstats_summary, how='inner', on='s')
@@ -447,10 +467,13 @@ parser.add_argument('--qc-stats-folder', type=str, default='Bulk/Whole genome se
                     help="Folder containing folders, each of which should contain QC data from WGS. Also supports a single folder with relevant files in it. Do not include project name.")
 parser.add_argument('--qc-suffix', type=str, default='.qaqc_metrics',
                     help="Suffix of each WGS QC file to import. Assumes that this file contains multiple rows for a single sample.")
+parser.add_argument('--max-threads', type=int, default=8,
+                    help='Max number of threads to use when downloading data from fuse.')
 
 parser.add_argument('--avoid-filtering-idxstats-chr', action='store_true',
                     help='If enabled, this flag will prevent filtering to autosomes when producing nucDNA coverage estimates.')
-
+parser.add_argument('--skip-batch', type=str, default='',
+                    help='Comma-separated batch names to filter out.')
 
 # defaults for debugging
 pipeline_output_folder = '220618_MitochondriaPipelineSwirl/v2.5_Multi_first50/,220618_MitochondriaPipelineSwirl/20k/'
@@ -468,6 +491,7 @@ dx_init = '220619_MitochondriaPipelineSwirl_v2_5_Multi_20k'
 dx_init = '220722_MitochondriaPipelineSwirl_v2_5_Multi_200k'
 avoid_filtering_idxstats_chr = False
 unified_prefix = 'batch_'
+skip_batch = ''
 
 
 if __name__ == '__main__':
