@@ -13,39 +13,30 @@ See the WDL folder for the self-contained WDL. The `v2.5_MongoSwirl_Single` fold
 - a scheduler for submitting jobs on UKB was built to improve submission automation
 - the merging pipeline has been significantly refactored
 
-## Generate multi-sample MatrixTables and perform QC
+### Generate multi-sample MatrixTables and perform QC
 
 The `generate_mtdna_call_mt` folder contains code used to merge single-sample VCFs into Hail MatrixTables. This code was written originally as an extension of code previously released for mtDNA analysis (Laricchia et al. 2022 Genome Res). Scripts in the root of this folder work across any platform; scripts in each sub-folder are platform specific.
 
-### dx
+#### dx
 
 Run `dx_pipeline.sh` to run the merging pipeline.
 
-### AoU
+#### AoU
 
 1. Currently, AoU does not have a central Cromwell implementation. Thus, we created `aou_mtdna_analysis_launcher.sh` to run the WDL. Tweak the parameters in the header for your configuration.
 2. To combine per-base coverage into an MT use `aou_annotate_coverage.py`
 3. To combine single-sample VCFs into an MT use `aou_combine_vcfs.py`
 
-### Terra
+#### Terra
 
 1. To combine per-base coverage into an MT use `annotate_coverage.py`
 2. To combine single-sample VCFs into an MT use `combine_vcfs.py`
 
-### All platforms
+#### All platforms
 
 1. To generate sample statistics after QC (e.g., mtCN), use `process_sample_stats.py`
 2. To annotate the VCF MatrixTable, run QC, run VEP, and output a QC'd variant flat file, use `add_annotations.py`
 
-## Genome-wide association study pipeline
-
-### UKB
-
-To run GWAS in UKB use the files in `gwas_ukb`. Using the outputs of QC, we run covariate correction with `generate_covariate_corrected_traits.Rmd` for mtCN (and for sensitivity analyses). To produce final heteroplasmy phenotypes, we use `produce_final_HL_traits.Rmd`. We use `saige_pan_ancestry_custom_rec.py` to run SAIGE in UKB with `custom_load_custom_sumstats_into_mt.py` to combine results into an MT. We have recently updated this SAIGE pipeline to allow for recessive-encoding GWAS as an option.
-
-### AllofUs
-
-We use the files in `gwas_aou` to run GWAS in AoU. To produce custom PCs by recomputing them per-ancestry, we use `run_per_ancestry_pca.py`. We run `aou_run_full_hl_gwas.py` to run the GWAS.
 
 ## Citation and data
 
@@ -79,3 +70,12 @@ See Supplementary table 1 for sample size information.
 
 Please note that at the time of writing, there is no mechanism by which custom workspaces in AoU can be made available to anyone with controlled tier access. Thus, we ask that in the interim, any users who desire to work with these data in AoU contact us to be added to the workspace. We are committed to making these data automatically available when this mechanism becomes available, and plan to beta-test this functionality when it is possible to do so.
 
+## Genome-wide association study pipeline
+
+### UKB
+
+To run GWAS in UKB use the files in `gwas_ukb`. Using the outputs of QC, we run covariate correction with `generate_covariate_corrected_traits.Rmd` for mtCN (and for sensitivity analyses). To produce final heteroplasmy phenotypes, we use `produce_final_HL_traits.Rmd`. We use `saige_pan_ancestry_custom_rec.py` to run SAIGE in UKB with `custom_load_custom_sumstats_into_mt.py` to combine results into an MT. We have recently updated this SAIGE pipeline to allow for recessive-encoding GWAS as an option.
+
+### AllofUs
+
+We use the files in `gwas_aou` to run GWAS in AoU. To produce custom PCs by recomputing them per-ancestry, we use `run_per_ancestry_pca.py`. We run `aou_run_full_hl_gwas.py` to run the GWAS.
