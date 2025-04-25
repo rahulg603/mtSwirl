@@ -5,6 +5,7 @@ import copy
 import argparse
 import logging
 from datetime import date
+import pandas as pd
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s", level='INFO', filename='saige_pipeline.log')
 
 from gnomad.utils import slack
@@ -18,8 +19,6 @@ from ukb_common.utils.saige_pipeline import *
 
 logger = logging.getLogger("saige_pan_ancestry_custom")
 logger.addHandler(logging.StreamHandler(sys.stderr))
-bucket_vcf = 'gs://ukb-diverse-pops'
-root_vcf = f'{bucket_vcf}/results'
 bucket = 'gs://rgupta-assoc'
 root = f'{bucket}/saige_gwas'
 pheno_folder = f'{bucket}/phenotype'
@@ -27,11 +26,13 @@ temp_bucket = 'gs://ukbb-diverse-temp-30day-multiregion'
 
 DESCRIPTION_PATH = f'{pheno_folder}/field_descriptions.tsv'
 
-HAIL_DOCKER_IMAGE = 'gcr.io/ukbb-diversepops-neale/hail_utils:6.1'
+#HAIL_DOCKER_IMAGE = 'gcr.io/ukbb-diversepops-neale/hail_utils:6.1'
 #PHENO_DOCKER_IMAGE = 'gcr.io/ukbb-diversepops-neale/rgupta_hail_utils'
 #SAIGE_DOCKER_IMAGE = 'gcr.io/ukbb-diversepops-neale/saige:1.1.5'
-PHENO_DOCKER_IMAGE = 'us-docker.pkg.dev/ukbb-diversepops-neale/pan-ukbb-docker-repo/rgupta-hail-utils'
-SAIGE_DOCKER_IMAGE = 'us-docker.pkg.dev/ukbb-diversepops-neale/pan-ukbb-docker-repo/saige:1.1.5'
+#PHENO_DOCKER_IMAGE = 'us-docker.pkg.dev/ukbb-diversepops-neale/pan-ukbb-docker-repo/rgupta-hail-utils-119:latest'
+PHENO_DOCKER_IMAGE = 'us-docker.pkg.dev/mito-wgs/mito-wgs-docker-repo/rgupta-hail-utils-bgen:0.2.119.2'
+#SAIGE_DOCKER_IMAGE = 'us-docker.pkg.dev/ukbb-diversepops-neale/pan-ukbb-docker-repo/saige:1.1.5'
+SAIGE_DOCKER_IMAGE = 'us-docker.pkg.dev/mito-wgs/mito-wgs-docker-repo/saige:1.3.6'
 QQ_DOCKER_IMAGE = 'konradjk/saige_qq:0.2'
 
 SCRIPT_DIR = '/ukb_common/saige'
@@ -217,6 +218,7 @@ def export_pheno_custom(p: Batch, output_path: str, pheno_keys, module: str, mt_
                         additional_args: str = ''):
     extract_task: Job = p.new_job(name='extract_pheno', attributes=copy.deepcopy(pheno_keys))
     extract_task.image(docker_image).cpu(n_threads).storage(storage)
+    extract_task.env('PYSPARK_SUBMIT_ARGS', '--driver-memory 20g --executor-memory 20g pyspark-shell')
     pheno_dict_opts = ' '.join([f"--{k} {shq(v)}" for k, v in pheno_keys.items()])
     python_command = f"""set -o pipefail; python3.8 {SCRIPT_DIR}/export_pheno.py
     --load_module {module} --load_mt_function {mt_loading_function}
@@ -239,7 +241,8 @@ def custom_fit_null_glmm(p: Batch, output_root: str, pheno_file: Resource, trait
                          sparse_grm_extension: str = None, inv_normalize: bool = False, skip_model_fitting: bool = False,
                          min_covariate_count: int = 10,
                          n_threads: int = 16, storage: str = '10Gi', memory: str = '60G',
-                         non_pre_emptible: bool = False, disable_loco: bool = False):
+                         non_pre_emptible: bool = False, disable_loco: bool = False,
+                         enable_offset: bool = False):
     analysis_type = "variant" if sparse_grm is None else "gene"
     pheno_col = 'value'
     user_id_col = 'userId'
@@ -289,6 +292,10 @@ def custom_fit_null_glmm(p: Batch, output_root: str, pheno_file: Resource, trait
                     f'--isCateVarianceRatio=TRUE ')
     else:
         loco_str = 'FALSE' if disable_loco else 'TRUE'
+    if enable_offset:
+        command += '--isCovariateOffset=TRUE '
+    else:
+        command += '--isCovariateOffset=FALSE '
     
     command += f'--nThreads={n_threads} --LOCO={loco_str} 2>&1 | tee {fit_null_task.stdout}'
     command = '; '.join([bim_fix_command, command])
@@ -312,7 +319,7 @@ def custom_run_saige(p: Batch, output_root: str, model_file: str, variance_ratio
     run_saige_task: Job = p.new_job(name=f'run_saige',
                                     attributes={
                                         'analysis_type': analysis_type
-                                    }).cpu(cpu).storage(storage).image(docker_image)  # Step 2 is single-threaded only
+                                    }).cpu(cpu).storage(storage).memory(memory).image(docker_image)  # Step 2 is single-threaded only
 
     if analysis_type == 'gene':
         run_saige_task.declare_resource_group(result={f'{add_suffix}gene.txt': '{root}',
@@ -333,7 +340,8 @@ def custom_run_saige(p: Batch, output_root: str, model_file: str, variance_ratio
 
     if use_bgen:
         command += (f'--bgenFile={vcf_file.bgen} '
-                    f'--bgenFileIndex={vcf_file["bgen.bgi"]} ')
+                    f'--bgenFileIndex={vcf_file["bgen.bgi"]} '
+                    f'--AlleleOrder=ref-first ')
     else:
         command += (f'--vcfFile={vcf_file["vcf.gz"]} '
                     f'--vcfFileIndex={vcf_file["vcf.gz.tbi"]} '
@@ -487,6 +495,72 @@ def custom_get_cases_and_controls_from_log(log_format):
     return cases, controls
 
 
+def custom_activate_service_account(task):
+    task.env('GOOGLE_APPLICATION_CREDENTIALS', '/gsa-key/key.json')
+
+
+def custom_extract_vcf_from_mt(p, output_root: str, docker_image: str, module: str = 'ukb_exomes',
+                               gene: str = None, interval: str = None, groups=None, gene_map_ht_path: str = None,
+                               set_missing_to_hom_ref: bool = False, callrate_filter: float = 0.0, adj: bool = True,
+                               export_bgen: bool = True, input_dosage: bool = False, reference: str = 'GRCh38',
+                               gene_ht_interval: str = None, group_file_only: bool = False, common_variants_only: bool = False,
+                               n_threads: int = 8, storage: str = '50Gi', additional_args: str = '', memory: str = '', encoding: str = 'additive'):
+    if groups is None:
+        # groups = {'pLoF', 'missense|LC', 'pLoF|missense|LC', 'synonymous'}
+        groups = {'pLoF', 'missense|LC', 'synonymous'}
+    extract_task = p.new_job(name=f'extract_vcf_{encoding}',
+                                  attributes={
+                                      'interval': interval
+                                  })
+    extract_task.image(docker_image).cpu(n_threads).storage(storage)
+    if export_bgen:
+        extract_task.declare_resource_group(out={'bgen': '{root}.bgen',
+                                                 'sample': '{root}.sample',
+                                                 'bgen.bgi': '{root}.bgen.bgi'})
+    else:
+        extract_task.declare_resource_group(out={'vcf.gz': f'{{root}}.vcf.gz',
+                                                 'vcf.gz.tbi': f'{{root}}.vcf.gz.tbi'})
+
+    output_file = f'{extract_task.bgz}.bgz' if not export_bgen else extract_task.out
+    command = f"""set -o pipefail; PYSPARK_SUBMIT_ARGS="--conf spark.driver.memory={int(3 * n_threads)}g pyspark-shell"
+    python3.8 {SCRIPT_DIR}/extract_vcf_from_mt.py
+    --load_module {module}
+    {"--additional_args " + additional_args if additional_args else ''}
+    {"--gene " + gene if gene else ""}
+    {"--interval " + interval if interval else ""}
+    {"--gene_ht_interval " + gene_ht_interval if gene_ht_interval else ""}
+    --groups "{','.join(groups)}"
+    --reference {reference} --n_threads {n_threads}
+    {"--gene_map_ht_path " + gene_map_ht_path if gene_map_ht_path else ""} 
+    {"--callrate_filter " + str(callrate_filter) if callrate_filter else ""} 
+    {"--export_bgen" if export_bgen else ""}
+    {"--input_bgen" if input_dosage else ""}
+    {"" if set_missing_to_hom_ref else "--mean_impute_missing"}
+    {"" if adj else "--no_adj"} 
+    {"--group_file_only" if group_file_only else ""} 
+    {"--common_variants_only" if common_variants_only else ""} 
+    {"--group_output_file " + extract_task.group_file if gene_map_ht_path else ""}
+    --encoding {encoding}
+    {"" if group_file_only else ("--output_file " + output_file)} | tee {extract_task.stdout}
+    ;""".replace('\n', ' ')
+
+    if not group_file_only:
+        if export_bgen:
+            command += f"\nls -lh; FILE={output_file}.failure; if [ -f $FILE ]; then cat $FILE; else /bgen_v1.1.4-Ubuntu16.04-x86_64/bgenix -g {extract_task.out.bgen} -index -clobber; fi"
+        else:
+            command += f'\nmv {extract_task.bgz}.bgz {extract_task.out["vcf.gz"]}; tabix {extract_task.out["vcf.gz"]};'
+    extract_task.command(command.replace('\n', ' '))
+
+    custom_activate_service_account(extract_task)
+    if not group_file_only:
+        p.write_output(extract_task.out, output_root)
+    if gene_map_ht_path:
+        p.write_output(extract_task.group_file, f'{output_root}.gene.txt')
+    p.write_output(extract_task.stdout, f'{output_root}.log')
+    return extract_task
+
+
+
 def main(args):
     hl.init(log='/tmp/saige_temp_hail.log')
 
@@ -509,6 +583,8 @@ def main(args):
     chrom_lengths = hl.get_reference(reference).lengths
     iteration = 1
     pops = args.pops.split(',') if args.pops else POPS
+    if args.encoding not in ['additive', 'recessive']:
+        raise ValueError('ERROR: encoding must be either additive or recessive.')
 
     # if args.local_test:
     #     backend = hb.LocalBackend(gsa_key_file='/Users/konradk/.hail/ukb-diverse-pops.json')
@@ -521,11 +597,14 @@ def main(args):
                                     source=args.source, sample_col=args.sample_col, 
                                     append=args.append, overwrite=args.overwrite_pheno_data,
                                     custom_covars=args.include_addl_covariates)
-
+    
+    sample_ht = hl.read_table(get_custom_phenotype_summary_path(args.suffix))
     if not args.force_serial_phenotype_export:
-        backend = hb.ServiceBackend(billing_project='ukb_diverse_pops',
-                                    bucket=temp_bucket.split('gs://', 1)[-1])
+        backend = hb.ServiceBackend(billing_project='UKB_GWAS_Rahul_Mootha',#'ukb_diverse_pops',
+                                    bucket=temp_bucket.split('gs://', 1)[-1],
+                                    regions=['us-central1'])
     for pop in pops:
+        this_pop_sample_info_ht = sample_ht.filter(sample_ht.pop == pop).key_by(*PHENO_KEY_FIELDS).drop('pop')
         if not args.force_serial_phenotype_export:
             p = hb.Batch(name=f'saige_pan_ancestry_{pop}', backend=backend, default_image=SAIGE_DOCKER_IMAGE,
                          default_storage='500Mi', default_cpu=n_threads)
@@ -590,7 +669,8 @@ def main(args):
                                                      pheno_key_dict['trait_type'], covariates,
                                                      get_ukb_grm_plink_path(pop, iteration, window), SAIGE_DOCKER_IMAGE,
                                                      inv_normalize=args.force_inv_normalize, n_threads=n_threads, min_covariate_count=1,
-                                                     non_pre_emptible=args.non_pre_emptible, storage='100Gi', disable_loco=args.disable_loco)
+                                                     non_pre_emptible=args.non_pre_emptible, storage='100Gi', disable_loco=args.disable_loco,
+                                                     enable_offset=args.enable_offset)
                 fit_null_task.attributes.update({'pop': pop})
                 fit_null_task.attributes.update(copy.deepcopy(pheno_key_dict))
                 model_file = fit_null_task.null_glmm.rda
@@ -601,6 +681,13 @@ def main(args):
         logger.info(f'Running {completed[False]} null models (already found {completed[True]})...')
 
         use_bgen = True
+        if args.encoding == 'additive':
+            bucket_vcf = 'gs://ukb-diverse-pops'
+            root_vcf = f'{bucket_vcf}/results'
+        elif args.encoding == 'recessive':
+            bucket_vcf = 'gs://ukb_genotypes'
+            root_vcf = f'{bucket_vcf}/recessive'
+
         vcf_dir = f'{root_vcf}/vcf/{pop}'
         test_extension = 'bgen' if use_bgen else 'vcf.gz'
         overwrite_vcfs = args.create_vcfs
@@ -624,10 +711,10 @@ def main(args):
                         vcf_file = p.read_input_group(**{'vcf.gz': f'{vcf_root}.vcf.gz',
                                                          'vcf.gz.tbi': f'{vcf_root}.vcf.gz.tbi'})
                 else:
-                    vcf_task = extract_vcf_from_mt(p, vcf_root, HAIL_DOCKER_IMAGE, 'ukbb_pan_ancestry', adj=False,
-                                                   additional_args=f'{chromosome},{pop}', input_dosage=True,
-                                                   reference=reference, interval=interval, export_bgen=use_bgen,
-                                                   n_threads=n_threads)
+                    vcf_task = custom_extract_vcf_from_mt(p, vcf_root, PHENO_DOCKER_IMAGE, 'ukbb_pan_ancestry', adj=False,
+                                                          additional_args=f'{chromosome},{pop}', input_dosage=True,
+                                                          reference=reference, interval=interval, export_bgen=use_bgen,
+                                                          n_threads=n_threads, encoding=args.encoding)
                     vcf_task.attributes['pop'] = pop
                     vcf_file = vcf_task.out
                 vcfs[interval] = vcf_file
@@ -642,6 +729,20 @@ def main(args):
         result_dir = f'{root}/result/{args.suffix}/{pop}'
         overwrite_results = args.overwrite_results
         for i, pheno_key_dict in enumerate(phenos_to_run):
+            
+            this_phenotype_as_ht = hl.Table.from_pandas(pd.DataFrame(pheno_key_dict, index=[0])).key_by(*PHENO_KEY_FIELDS)
+            this_pop_subset_sample_info_ht = this_pop_sample_info_ht.semi_join(this_phenotype_as_ht)
+            sample_size = this_pop_subset_sample_info_ht.n_cases_by_pop.collect()
+            if len(sample_size) != 1:
+                raise ValueError(f'ERROR: did not find a sample size for {stringify_pheno_key_dict(pheno_key_dict)}.')
+            if sample_size[0] > 150000:
+                saige_mem = '6Gi'
+                logger.info(f'For phenotype {stringify_pheno_key_dict(pheno_key_dict)} using 6.5gb memory due to sample size {str(sample_size[0])}.')
+            else:
+                saige_mem = '3Gi'
+            if args.mem_saige is not None:
+                saige_mem = f'{args.mem_saige}Gi'
+
             if stringify_pheno_key_dict(pheno_key_dict) not in null_models: continue
             model_file, variance_ratio_file = null_models[stringify_pheno_key_dict(pheno_key_dict)]
 
@@ -669,7 +770,7 @@ def main(args):
                         saige_task = custom_run_saige(p, results_path, model_file, variance_ratio_file, vcf_file, samples_file,
                                                       SAIGE_DOCKER_IMAGE, trait_type=pheno_key_dict['trait_type'], use_bgen=use_bgen,
                                                       chrom=chromosome, log_pvalue=args.log_p, disable_loco=args.disable_loco,
-                                                      cpu=args.n_cpu_saige, min_mac=args.min_mac)
+                                                      cpu=args.n_cpu_saige, min_mac=args.min_mac, memory=saige_mem)
                         saige_task.attributes.update({'interval': interval, 'pop': pop})
                         saige_task.attributes.update(copy.deepcopy(pheno_key_dict))
                         saige_tasks.append(saige_task)
@@ -744,10 +845,13 @@ if __name__ == '__main__':
     parser.add_argument('--n_cpu_saige', type=int, default=1, help='Number of threads to request for running SAIGE.')
     parser.add_argument('--n_cpu_merge', type=int, default=8, help='Number of threads to request during summary stat merging.')
     parser.add_argument('--n_cpu_pheno', default=16, type=int)
+    parser.add_argument('--mem_saige', default=None, type=int)
     parser.add_argument('--n_threads', default=8, type=int)
     parser.add_argument('--min_mac', default=1, type=int)
     parser.add_argument('--force_inv_normalize', action='store_true')
     parser.add_argument('--force_serial_phenotype_export', action='store_true')
+    parser.add_argument('--enable_offset', action='store_true', help='If true, will enable offset-based fixed effects covariate correction. Default is to iteratively update covariate estimates.')
+    parser.add_argument('--encoding', type=str, default='additive')
     args = parser.parse_args()
 
     main(args)

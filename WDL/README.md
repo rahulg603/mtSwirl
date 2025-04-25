@@ -33,7 +33,7 @@ bash run-dxcompiler-docker compile parallel_fullMitoPipeline_v2_6_Multi.wdl -pro
 
 We have validated that this version of the pipeline produces identical results to the serial version. To take advantage of this pipeline, you must use larger VMs. You can see some example sizes in the updated JSON in `prepopulated_inputs_dx_parallel.json` which contains the new variables that need to be used with this new WDL.
 
-For DNANexus, we have several recommendations when building input schemas for batch job submission, building off `prepopulated_inputs_dx.json`:
+For DNANexus, we have several recommendations when building input schemas for batch job submission, building off `prepopulated_inputs_dx[_parallel].json`:
 
 1. Please do not use docker.io paths for large scale workflows, and instead upload images to your dx project (see [here](https://documentation.dnanexus.com/developer/apps/dependency-management/using-docker-images)).
 2. We recommend saving all GCP hosted files (as listed in `prepopulated_inputs_dx.json`) into your own project directory on the dx platform, and suggest you change paths accordingly to the corresponding [DNANexus Link](https://documentation.dnanexus.com/developer/api/running-analyses/job-input-and-output).
@@ -41,3 +41,5 @@ For DNANexus, we have several recommendations when building input schemas for ba
    1. `stage-common.sample_name`: an array of sample names
    2. `stage-common.wgs_aligned_input_bam_or_cram`: an array of DNANexus links corresponding to WGS CRAM files
    3. `stage-common.wgs_aligned_input_bam_or_cram_index`: an array of DNANexus links corresponding to WGS CRAI files
+
+To add these additional fields, we recommend batching the list of all CRAMs/CRAIs into 18 samples (fullMitoPipeline) or 40 samples (fullMitoSamples). Each batch is processed on one machine at a time either serially or in parallel respectively.

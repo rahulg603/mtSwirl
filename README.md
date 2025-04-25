@@ -10,6 +10,7 @@ See the WDL folder for the self-contained WDL. The `v2.5_MongoSwirl_Single` fold
 **v2 release:** As of 4/25 we have released v2 of the mtSwirl pipeline. This version has several major updates:
 
 - a parallelized version of mtSwirl_Multi has been developed, boosting compute speed on DNANexus
+- a scheduler for submitting jobs on UKB was built to improve submission automation
 - the merging pipeline has been significantly refactored
 
 ## Generate multi-sample MatrixTables and perform QC
@@ -40,7 +41,7 @@ Run `dx_pipeline.sh` to run the merging pipeline.
 
 ### UKB
 
-To run GWAS in UKB use the files in `gwas_ukb`. Using the outputs of QC, we run covariate correction with `generate_covariate_corrected_traits.Rmd` for mtCN (and for sensitivity analyses). To produce final heteroplasmy phenotypes, we use `produce_final_HL_traits.Rmd`. We use `saige_pan_ancestry_custom.py` to run SAIGE in UKB with `custom_load_custom_sumstats_into_mt.py` to combine results into an MT.
+To run GWAS in UKB use the files in `gwas_ukb`. Using the outputs of QC, we run covariate correction with `generate_covariate_corrected_traits.Rmd` for mtCN (and for sensitivity analyses). To produce final heteroplasmy phenotypes, we use `produce_final_HL_traits.Rmd`. We use `saige_pan_ancestry_custom_rec.py` to run SAIGE in UKB with `custom_load_custom_sumstats_into_mt.py` to combine results into an MT. We have recently updated this SAIGE pipeline to allow for recessive-encoding GWAS as an option.
 
 ### AllofUs
 
@@ -60,6 +61,8 @@ Individual level data corresponding to mtDNA copy number (before and after covar
 
 - For UKB, via the [UKB data showcase](https://biobank.ndph.ox.ac.uk/ukb/). Note that final data return is currently in process.
 - For AoU, as part of the `Nuclear genetic control of mtDNA copy number and heteroplasmy in humans` [workspace](https://workbench.researchallofus.org/workspaces/aou-rw-3273c7f0/nucleargeneticcontrolofmtdnacopynumberandheteroplasmyinhumans/data). Note that controlled tier access is required to clone this workspace.
+
+The above data and below analyses are all from the 250k dataset, utilizing ~200k (pre-QC) samples from UKB and ~100k (pre-QC) samples from AoU v6.
 
 ### Summary statistics
 
