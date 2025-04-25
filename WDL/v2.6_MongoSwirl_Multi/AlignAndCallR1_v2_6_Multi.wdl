@@ -1,9 +1,8 @@
 version 1.0
 
-import "https://raw.githubusercontent.com/gnchau/mtSwirl/master/WDL/v2.6_MongoSwirl_Multi/Parallel_MongoTasks_v2_6_Multi.wdl" as ParallelMongoTasks_Multi
-import "https://raw.githubusercontent.com/gnchau/mtSwirl/master/WDL/v2.6_MongoSwirl_Multi/MongoTasks_v2_6_Multi.wdl" as MongoTasks_Multi
+import "https://raw.githubusercontent.com/rahulg603/testing-mito-wdl/master/WDL/v2.6_MongoSwirl_Multi/MongoTasks_v2_6_Multi.wdl" as MongoTasks_Multi
 
-workflow ParallelAlignAndCallR1 {
+workflow AlignAndCallR1 {
   meta {
     description: "Takes in unmapped bam and outputs VCF of SNP/Indel calls on the mitochondria."
   }
@@ -50,15 +49,13 @@ workflow ParallelAlignAndCallR1 {
     #Optional runtime arguments
     Int? preemptible_tries
     Int? n_cpu
-    Int? n_cpu_serial
-    Int batch_size
   }
 
   parameter_meta {
   }
 
   if (use_haplotype_caller_nucdna) {
-    call ParallelMongoTasks_Multi.ParallelMongoHC as CallNucHCIntegrated {
+    call MongoTasks_Multi.MongoHC as CallNucHCIntegrated {
       input:
         input_bam = input_bam,
         input_bai = input_bai,
@@ -73,10 +70,10 @@ workflow ParallelAlignAndCallR1 {
         gatk_docker_override = gatk_docker_override,
         gatk_version = gatk_version, 
         hc_dp_lower_bound = hc_dp_lower_bound,
+        mem = 4,
         preemptible_tries = preemptible_tries,
         JsonTools = JsonTools,
-        n_cpu = n_cpu,
-        batch_size = batch_size
+        n_cpu = n_cpu
     }
   }
   if (!use_haplotype_caller_nucdna) {
@@ -138,7 +135,7 @@ workflow ParallelAlignAndCallR1 {
       mem = M2_mem,
       preemptible_tries = preemptible_tries,
       JsonTools = JsonTools,
-      n_cpu = n_cpu_serial
+      n_cpu = n_cpu
   }
 
   call GetContamination {

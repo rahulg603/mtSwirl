@@ -1,9 +1,8 @@
 version 1.0
 
-import "https://raw.githubusercontent.com/gnchau/mtSwirl/master/WDL/v2.6_MongoSwirl_Multi/Parallel_MongoTasks_v2_6_Multi.wdl" as ParallelMongoTasks_Multi
-import "https://raw.githubusercontent.com/gnchau/mtSwirl/master/WDL/v2.6_MongoSwirl_Multi/MongoTasks_v2_6_Multi.wdl" as MongoTasks_Multi
+import "https://raw.githubusercontent.com/rahulg603/testing-mito-wdl/master/WDL/v2.6_MongoSwirl_Multi/MongoTasks_v2_6_Multi.wdl" as MongoTasks_Multi
 
-workflow ParallelAlignAndCallR2 {
+workflow AlignAndCallR2 {
   meta {
     description: "Takes in unmapped bam and outputs VCF of SNP/Indel calls on the mitochondria."
   }
@@ -68,14 +67,13 @@ workflow ParallelAlignAndCallR2 {
     Int? preemptible_tries
     Int? n_cpu
     Int? n_cpu_bwa
-    Int batch_size
   }
 
   parameter_meta {
     unmapped_bam: "Unmapped and subset bam, optionally with original alignment (OA) tag"
   }
 
-  call ParallelMongoTasks_Multi.ParallelMongoAlignToMtRegShiftedAndMetrics as AlignToMtRegShiftedAndMetrics {
+  call MongoTasks_Multi.MongoAlignToMtRegShiftedAndMetrics as AlignToMtRegShiftedAndMetrics {
     input:
       input_bam = unmapped_bam,
       sample_base_name = sample_name,
@@ -105,8 +103,7 @@ workflow ParallelAlignAndCallR2 {
       
       preemptible_tries = preemptible_tries,
       JsonTools = JsonTools,
-      n_cpu = n_cpu_bwa,
-      batch_size = batch_size
+      n_cpu = n_cpu_bwa
   }
 
   Int M2_mem = if AlignToMtRegShiftedAndMetrics.max_mean_coverage > 25000 then 14 else 7
@@ -146,7 +143,6 @@ workflow ParallelAlignAndCallR2 {
       mem = M2_mem,
       preemptible_tries = preemptible_tries,
       JsonTools = JsonTools,
-      #batch_size = batch_size,
       n_cpu = n_cpu
   }
 

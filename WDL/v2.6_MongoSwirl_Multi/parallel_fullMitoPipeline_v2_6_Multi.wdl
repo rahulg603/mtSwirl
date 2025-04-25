@@ -1,10 +1,10 @@
 version 1.0
 
-import "https://raw.githubusercontent.com/gnchau/mtSwirl/master/WDL/v2.6_MongoSwirl_Multi/AlignAndCallR1_v2_6_Multi.wdl" as AlignAndCallR1_Multi
-import "https://raw.githubusercontent.com/gnchau/mtSwirl/master/WDL/v2.6_MongoSwirl_Multi/AlignAndCallR2_v2_6_Multi.wdl" as AlignAndCallR2_Multi
+import "https://raw.githubusercontent.com/gnchau/mtSwirl/master/WDL/v2.6_MongoSwirl_Multi/parallel_AlignAndCallR1_v2_6_Multi.wdl" as ParallelAlignAndCallR1_Multi
+import "https://raw.githubusercontent.com/gnchau/mtSwirl/master/WDL/v2.6_MongoSwirl_Multi/parallel_AlignAndCallR2_v2_6_Multi.wdl" as ParallelAlignAndCallR2_Multi
 import "https://raw.githubusercontent.com/gnchau/mtSwirl/master/WDL/v2.6_MongoSwirl_Multi/LiftoverTools_v2_6_Multi.wdl" as LiftoverTools_Multi
 import "https://raw.githubusercontent.com/gnchau/mtSwirl/master/WDL/v2.6_MongoSwirl_Multi/ProduceSelfReferenceFiles_v2_6_Multi.wdl" as ProduceSelfReferenceFiles_Multi
-import "https://raw.githubusercontent.com/gnchau/mtSwirl/master/WDL/v2.6_MongoSwirl_Multi/Parallel_MongoTasks_v2_6_Multi.wdl" as ParallelMongoTasks_Multi
+import "https://raw.githubusercontent.com/gnchau/mtSwirl/master/WDL/v2.6_MongoSwirl_Multi/parallel_MongoTasks_v2_6_Multi.wdl" as ParallelMongoTasks_Multi
 import "https://raw.githubusercontent.com/gnchau/mtSwirl/master/WDL/v2.6_MongoSwirl_Multi/MongoTasks_v2_6_Multi.wdl" as MongoTasks_Multi
 
 workflow MitochondriaPipeline {
@@ -141,7 +141,7 @@ workflow MitochondriaPipeline {
       preemptible_tries = preemptible_tries
   }
 
-  call AlignAndCallR1_Multi.ParallelAlignAndCallR1 as AlignAndCallR1 {
+  call ParallelAlignAndCallR1_Multi.ParallelAlignAndCallR1 as AlignAndCallR1 {
     input:
       input_bam = ProcessBam.output_bam,
       input_bai = ProcessBam.output_bai,
@@ -209,7 +209,7 @@ workflow MitochondriaPipeline {
       ucsc_docker = ucsc_docker
   }
 
-  call AlignAndCallR2_Multi.ParallelAlignAndCallR2 as AlignAndCallR2 {
+  call ParallelAlignAndCallR2_Multi.ParallelAlignAndCallR2 as AlignAndCallR2 {
     input:
       unmapped_bam = ProcessBam.unmapped_bam,
       sample_name = ProduceSelfRefFiles.samples,
