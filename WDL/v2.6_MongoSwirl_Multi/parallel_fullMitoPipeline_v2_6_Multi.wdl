@@ -1,9 +1,10 @@
 version 1.0
 
-import "https://raw.githubusercontent.com/gnchau/mtSwirl/master/WDL/v2.6_MongoSwirl_Multi/AlignAndCallR1_v2_6_Multi.wdl" as AlignAndCallR1_Multi
-import "https://raw.githubusercontent.com/gnchau/mtSwirl/master/WDL/v2.6_MongoSwirl_Multi/AlignAndCallR2_v2_6_Multi.wdl" as AlignAndCallR2_Multi
+import "https://raw.githubusercontent.com/gnchau/mtSwirl/master/WDL/v2.6_MongoSwirl_Multi/parallel_AlignAndCallR1_v2_6_Multi.wdl" as ParallelAlignAndCallR1_Multi
+import "https://raw.githubusercontent.com/gnchau/mtSwirl/master/WDL/v2.6_MongoSwirl_Multi/parallel_AlignAndCallR2_v2_6_Multi.wdl" as ParallelAlignAndCallR2_Multi
 import "https://raw.githubusercontent.com/gnchau/mtSwirl/master/WDL/v2.6_MongoSwirl_Multi/LiftoverTools_v2_6_Multi.wdl" as LiftoverTools_Multi
 import "https://raw.githubusercontent.com/gnchau/mtSwirl/master/WDL/v2.6_MongoSwirl_Multi/ProduceSelfReferenceFiles_v2_6_Multi.wdl" as ProduceSelfReferenceFiles_Multi
+import "https://raw.githubusercontent.com/gnchau/mtSwirl/master/WDL/v2.6_MongoSwirl_Multi/parallel_MongoTasks_v2_6_Multi.wdl" as ParallelMongoTasks_Multi
 import "https://raw.githubusercontent.com/gnchau/mtSwirl/master/WDL/v2.6_MongoSwirl_Multi/MongoTasks_v2_6_Multi.wdl" as MongoTasks_Multi
 
 workflow MitochondriaPipeline {
@@ -69,6 +70,7 @@ workflow MitochondriaPipeline {
     String genomes_cloud_docker
     String haplochecker_docker
     String gatk_samtools_docker
+    Int batch_size
 
     #Optional runtime arguments
     Int? printreads_mem
@@ -76,6 +78,8 @@ workflow MitochondriaPipeline {
     Int? n_cpu_subsetbam
     Int? n_cpu_m2_hc_lift
     Int? n_cpu_bwa
+    Int? n_cpu_m2_serial
+    Int? n_cpu_liftover
     Int? preemptible_tries
   }
 
@@ -89,7 +93,7 @@ workflow MitochondriaPipeline {
 
   String self_ref_suffix = ".self.ref"
 
-  call MongoTasks_Multi.MongoSubsetBam as SubsetBam {
+  call ParallelMongoTasks_Multi.ParallelMongoSubsetBam as SubsetBam {
     input:
       input_bam = wgs_aligned_input_bam_or_cram,
       input_bai = wgs_aligned_input_bam_or_cram_index,
@@ -107,11 +111,13 @@ workflow MitochondriaPipeline {
       force_manual_download = force_manual_download,
       mem = printreads_mem,
       JsonTools = JsonTools,
+      # overwrite here
       n_cpu = n_cpu_subsetbam,
+      batch_size = batch_size,
       preemptible_tries = preemptible_tries
-  }
+    }
 
-  call MongoTasks_Multi.MongoProcessBamAndRevert as ProcessBam {
+  call ParallelMongoTasks_Multi.ParallelMongoProcessBamAndRevert as ProcessBam {
     input:
       subset_bam = SubsetBam.subset_bam,
       subset_bai = SubsetBam.subset_bai,
@@ -131,10 +137,11 @@ workflow MitochondriaPipeline {
       coverage_cap = 100000,
       JsonTools = JsonTools,
       n_cpu = n_cpu_bwa,
+      batch_size = batch_size,
       preemptible_tries = preemptible_tries
   }
 
-  call AlignAndCallR1_Multi.AlignAndCallR1 as AlignAndCallR1 {
+  call ParallelAlignAndCallR1_Multi.ParallelAlignAndCallR1 as AlignAndCallR1 {
     input:
       input_bam = ProcessBam.output_bam,
       input_bai = ProcessBam.output_bai,
@@ -167,7 +174,9 @@ workflow MitochondriaPipeline {
       JsonTools = JsonTools,
       preemptible_tries = preemptible_tries,
       haplochecker_docker = haplochecker_docker,
-      n_cpu = n_cpu_m2_hc_lift
+      batch_size = batch_size,
+      n_cpu = n_cpu_m2_hc_lift,
+      n_cpu_serial = 8
   }
 
   call ProduceSelfReferenceFiles_Multi.ProduceSelfReferenceFiles as ProduceSelfRefFiles {
@@ -200,7 +209,7 @@ workflow MitochondriaPipeline {
       ucsc_docker = ucsc_docker
   }
 
-  call AlignAndCallR2_Multi.AlignAndCallR2 as AlignAndCallR2 {
+  call ParallelAlignAndCallR2_Multi.ParallelAlignAndCallR2 as AlignAndCallR2 {
     input:
       unmapped_bam = ProcessBam.unmapped_bam,
       sample_name = ProduceSelfRefFiles.samples,
@@ -249,10 +258,11 @@ workflow MitochondriaPipeline {
       JsonTools = JsonTools,
       preemptible_tries = preemptible_tries,
       n_cpu_bwa = n_cpu_bwa,
-      n_cpu = n_cpu_m2_hc_lift
+      batch_size = batch_size,
+      n_cpu = 8
   }
 
-  call MongoTasks_Multi.MongoLiftoverVCFAndGetCoverage as LiftOverAfterSelf {
+  call ParallelMongoTasks_Multi.ParallelMongoLiftoverVCFAndGetCoverage as LiftOverAfterSelf {
     input:
       sample_name = AlignAndCallR2.samples,
       selfref_bundle = ProduceSelfRefFiles.selfref_bundle,
@@ -283,7 +293,8 @@ workflow MitochondriaPipeline {
       JsonTools = JsonTools,
       self_suffix = self_ref_suffix,
 
-      n_cpu = n_cpu_m2_hc_lift,
+      n_cpu = 32,
+      batch_size = batch_size,
       genomes_cloud_docker = genomes_cloud_docker,
       preemptible_tries = preemptible_tries
   }
@@ -561,7 +572,7 @@ task NucCoverageAtEveryBase {
     done
   >>>
   runtime {
-    disks: "local-disk " + disk_size + " HDD"
+    disks: "local-disk " + disk_size + " SSD"
     memory: "2000 MB"
     docker: "us.gcr.io/broad-gotc-prod/genomes-in-the-cloud:2.4.2-1552931386"
     preemptible: select_first([preemptible_tries, 5])
@@ -586,11 +597,11 @@ task TransposeTable {
   command <<<
     set -e
 
-    R --vanilla <<CODE
+    R --vanilla <<EOF
       df = read.csv("~{input_table}", header=F, sep='\t')
       swapped_df = as.data.frame(t(df))
       write.table(swapped_df, sep ='\t', row.names = F, col.names = F, file = "~{output_table}", quote = F)
-    CODE
+    EOF
   >>>
 
   output {
@@ -598,7 +609,7 @@ task TransposeTable {
   }
 
   runtime {
-    disks: "local-disk 10 HDD"
+    disks: "local-disk 10 SSD"
     memory: "1 GB"
     docker: genomes_cloud_docker
     preemptible: 5
@@ -629,25 +640,25 @@ task MergeMitoMultiSampleOutputs {
     set -e
 
     # start by merging statistics
-    R --vanilla <<CODE
+    R --vanilla <<EOF
       files_of_interest <- read.csv("~{write_lines(statistics)}", sep='\t', stringsAsFactors=F, header=F)[[1]]
       dfs <- lapply(files_of_interest, function(x)read.csv(x, sep='\t', stringsAsFactors=F))
       df <- do.call("rbind", dfs)
       write.table(df, sep ='\t', row.names = F, file = "batch_analysis_statistics.tsv", quote = F)
-    CODE
+    EOF
 
     # now produce the relevant inputs for the per-batch MT script
-    R --vanilla <<CODE
+    R --vanilla <<EOF
       sample_ids <- read.csv("~{write_lines(sample_name)}", sep='\t', stringsAsFactors=F, header=F)[[1]]
       paths_coverage <- read.csv("~{write_lines(coverage_table)}", sep='\t', stringsAsFactors=F, header=F)[[1]]
       paths_vcf <- read.csv("~{write_lines(variant_vcf)}", sep='\t', stringsAsFactors=F, header=F)[[1]]
 
       write.table(data.frame(s=sample_ids, path=paths_coverage), sep='\t', row.names=F, file='coverage_paths.tsv', quote=F)
       write.table(data.frame(s=sample_ids, path=paths_vcf), sep='\t', row.names=F, file='vcf_paths.tsv', quote=F)
-    CODE
+    EOF
 
     # merge idxstats stuff
-    R --vanilla <<CODE
+    R --vanilla <<EOF
       files_of_interest <- read.csv("~{write_lines(idxstats_metrics)}", sep='\t', stringsAsFactors=F, header=F)[[1]]
       samples <- read.csv("~{write_lines(sample_name)}", stringsAsFactors=F, header=F)[[1]]
       dfs <- lapply(1:length(files_of_interest), function(idx) {
@@ -659,10 +670,10 @@ task MergeMitoMultiSampleOutputs {
       gz1 <- gzfile("batch_idxstats_metrics.tsv.gz", 'w')
       write.table(df, sep ='\t', row.names = F, file = gz1, quote = F)
       close(gz1)
-    CODE
+    EOF
 
     # merge yield stuff
-    R --vanilla <<CODE
+    R --vanilla <<EOF
       files_of_interest <- read.csv("~{write_lines(yield_metrics)}", sep='\t', stringsAsFactors=F, header=F)[[1]]
       samples <- read.csv("~{write_lines(sample_name)}", stringsAsFactors=F, header=F)[[1]]
       dfs <- lapply(1:length(files_of_interest), function(idx) {
@@ -674,7 +685,7 @@ task MergeMitoMultiSampleOutputs {
       gz1 <- gzfile("batch_yield_metrics.tsv.gz", 'w')
       write.table(df, sep ='\t', row.names = F, file = gz1, quote = F)
       close(gz1)
-    CODE
+    EOF
 
     mkdir tmp
 
@@ -702,7 +713,7 @@ task MergeMitoMultiSampleOutputs {
   }
 
   runtime {
-    disks: "local-disk " + disk_size + " HDD"
+    disks: "local-disk " + disk_size + " SSD"
     memory: "2 GB"
     docker: genomes_cloud_docker
     preemptible: select_first([preemptible_tries, 5])
@@ -769,7 +780,7 @@ task ExtractProduceSelfRefOutputs {
   runtime {
     preemptible: select_first([preemptible_tries, 5])
     memory: "1 GB"
-    disks: "local-disk " + disk_size + " HDD"
+    disks: "local-disk " + disk_size + " SSD"
     docker: haplochecker_docker
   }
 }

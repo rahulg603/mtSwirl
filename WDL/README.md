@@ -25,6 +25,14 @@ There are some additional notes required for execution on DNANexus. Once you hav
 bash run-dxcompiler-docker compile fullMitoPipeline_v2_6_Multi.wdl -project PROJECT_ID -folder DESIRED_DX_PATH -f
 ```
 
+**UPDATE:** as of v2 of this pipeline, we have developed a new version which uses mutli-core processing per-VM to greatly boost compute speed for time-intensive tasks. To run the parallelized pipeline, use:
+
+```
+bash run-dxcompiler-docker compile parallel_fullMitoPipeline_v2_6_Multi.wdl -project PROJECT_ID -folder DESIRED_DX_PATH -f
+```
+
+We have validated that this version of the pipeline produces identical results to the serial version. To take advantage of this pipeline, you must use larger VMs. You can see some example sizes in the updated JSON in `prepopulated_inputs_dx_parallel.json` which contains the new variables that need to be used with this new WDL.
+
 For DNANexus, we have several recommendations when building input schemas for batch job submission, building off `prepopulated_inputs_dx.json`:
 
 1. Please do not use docker.io paths for large scale workflows, and instead upload images to your dx project (see [here](https://documentation.dnanexus.com/developer/apps/dependency-management/using-docker-images)).

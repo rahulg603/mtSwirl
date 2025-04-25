@@ -5,7 +5,6 @@ import argparse
 import subprocess
 from copy import deepcopy
 from datetime import datetime
-hl._set_flags(no_whole_stage_codegen='1')
 
 
 NONREF = '<NON_REF>'
@@ -1406,7 +1405,7 @@ def flip_success_fields(mt_success, mt_meta, repaired_mt, insertions, deletions)
     return mt_success_final, n_success_flipped
 
 
-def left_align_and_normalize(mt, mt_meta, reference, reference_fasta_path):
+def left_align_and_normalize(mt, mt_meta, reference, reference_fasta_path, output_prefix):
     """
     Here we use bcftools norm to normalize and left-align variants. We have tested this extensively:
 
@@ -1440,8 +1439,8 @@ def left_align_and_normalize(mt, mt_meta, reference, reference_fasta_path):
     
     All of these seem appropriate.
     """
-    hl.export_vcf(mt, 'tmp.vcf', metadata=mt_meta)
-    res = subprocess.run(["bcftools", 'norm', '-f', reference_fasta_path, 'tmp.vcf', '-o', 'tmp_fixed.vcf'], 
+    hl.export_vcf(mt, f'{output_prefix}.tmp.vcf', metadata=mt_meta)
+    res = subprocess.run(["bcftools", 'norm', '-f', reference_fasta_path, f'{output_prefix}.tmp.vcf', '-o', f'{output_prefix}.tmp_fixed.vcf'], 
                          stderr=subprocess.PIPE, text=True, check=True)
 
     if res.returncode != 0:
@@ -1452,7 +1451,7 @@ def left_align_and_normalize(mt, mt_meta, reference, reference_fasta_path):
     bcftools_output = re.search('^Lines   total/split/realigned/skipped:\t([0-9]+)/([0-9]+)/([0-9]+)/([0-9]+)$', bcftools_split_output[0])
     if not bcftools_output:
         raise subprocess.SubprocessError('ERROR: bcftools output did not match expected format.')
-    mt_new, mt_meta_new = read_mito_vcf('tmp_fixed.vcf', reference)
+    mt_new, mt_meta_new = read_mito_vcf(f'{output_prefix}.tmp_fixed.vcf', reference)
     if int(bcftools_output[1]) != mt.count_rows():
         raise subprocess.SubprocessError('ERROR: bcftools did not count the same number of variants as was in input mt.')
     if mt_new.count_rows() != mt.count_rows():
@@ -1731,7 +1730,11 @@ def write_outcome_log(s, final_mt, original_mt, failed_to_liftover, success_vcf,
 def main(vcf_file, success_vcf_file, individual_name, self_to_ref_chain, ref_to_self_chain, self_fasta, self_fai, self_homoplasmies, logging,
          reference_fasta, reference_fai, allow_NONREF, simple_entry_field_correction, output_prefix, export_homoplasmic_deletions_coverage, output_txt_for_wdl, 
          skip_checkpoint, skip_norm, always_fail_on_dupe, debug):
+    
     ###### SET UP SELF-REFERENCE AND LOGGING ########
+    hl.init(master='local[2]', log=f'{output_prefix}.hail_internal_logging.log', tmp_dir=f'{output_prefix}_hail_tmpdir')
+    hl._set_flags(no_whole_stage_codegen='1')
+    
     individual_name_input = individual_name
     individual_name = compatiblify_sample_name(individual_name)
     self_ref = hl.ReferenceGenome(individual_name, ['chrM'], {'chrM':fai_to_len(self_fai)}, mt_contigs=['chrM'])
@@ -1924,7 +1927,7 @@ def main(vcf_file, success_vcf_file, individual_name, self_to_ref_chain, ref_to_
     final_mt = drop_info(final_mt.drop(*ENTRY_drop_fields), ROW_drop_fields).persist()
     if not skip_norm:
         print('Running bcftools norm to left-align and shift indels...', file=log)
-        final_mt, final_metadata_2, n_left_aligned, message = left_align_and_normalize(final_mt, final_metadata, ref, reference_fasta)
+        final_mt, final_metadata_2, n_left_aligned, message = left_align_and_normalize(final_mt, final_metadata, ref, reference_fasta, output_prefix)
         print('bcftools returned: ' + message, file=log)
     else:
         final_mt = final_mt.key_rows_by().select_rows(*final_success_mt.row).key_rows_by('locus','alleles')
@@ -1984,188 +1987,12 @@ debug = False
 skip_checkpoint = True
 skip_norm = False
 always_fail_on_dupe = False
-output_prefix = '/Users/rahulgupta/Desktop/test_output/testing_liftover_hail'
-reference_fasta = '/Users/rahulgupta/Desktop/220118_walk_through_self_references/Data/Homo_sapiens_assembly38.chrM.fasta'
-reference_fai = '/Users/rahulgupta/Desktop/220118_walk_through_self_references/Data/Homo_sapiens_assembly38.chrM.fasta.fai'
-logging = '/Users/rahulgupta/Desktop/fix_liftover.log'
-
-individual_name = 'V911'
-self_to_ref_chain = '/Users/rahulgupta/Desktop/220118_walk_through_self_references/Data/V911/V911_to_reference.chain'
-ref_to_self_chain = '/Users/rahulgupta/Desktop/220118_walk_through_self_references/Data/V911/reference_to_V911.chain'
-self_fasta = '/Users/rahulgupta/Desktop/220118_walk_through_self_references/Data/V911/V911.self.ref.fasta'
-self_fai = '/Users/rahulgupta/Desktop/220118_walk_through_self_references/Data/V911/V911.self.ref.fasta.fai'
-self_homoplasmies = '/Users/rahulgupta/Desktop/220118_walk_through_self_references/Data/V911/V911.self.ref.reversed.withfilters.selfRef.homoplasmies.vcf.bgz'
-vcf_file = '/Users/rahulgupta/Desktop/220118_walk_through_self_references/Data/Old_files/out.selfToRef.rejected.vcf'
-success_vcf_file = '/Users/rahulgupta/Desktop/220118_walk_through_self_references/Data/Old_files/out.selfToRef.vcf'
-
-individual_name = 'B370'
-self_to_ref_chain = '/Users/rahulgupta/Desktop/220118_walk_through_self_references/Data/B370/B370.self.ref_to_Homo_sapiens_assembly38.chrM.chain'
-ref_to_self_chain = '/Users/rahulgupta/Desktop/220118_walk_through_self_references/Data/B370/reference_to_B370.chain'
-self_fasta = '/Users/rahulgupta/Desktop/220118_walk_through_self_references/Data/B370/B370.self.ref.fasta'
-self_fai = '/Users/rahulgupta/Desktop/220118_walk_through_self_references/Data/B370/B370.self.ref.fasta.fai'
-self_homoplasmies = '/Users/rahulgupta/Desktop/220118_walk_through_self_references/Data/B370/B370.self.ref.reversed.selfRef.homoplasmies.vcf.bgz'
-vcf_file = '/Users/rahulgupta/Desktop/reject_b370.vcf'
-
-individual_name = 'X1882'
-self_to_ref_chain = '/Users/rahulgupta/Desktop/220118_walk_through_self_references/Data/X1882/X1882_to_reference.chain'
-ref_to_self_chain = '/Users/rahulgupta/Desktop/220118_walk_through_self_references/Data/X1882/reference_to_X1882.chain'
-self_fasta = '/Users/rahulgupta/Desktop/220118_walk_through_self_references/Data/X1882/X1882.self.ref.fasta'
-self_fai = '/Users/rahulgupta/Desktop/220118_walk_through_self_references/Data/X1882/X1882.self.ref.fasta.fai'
-self_homoplasmies = '/Users/rahulgupta/Desktop/220118_walk_through_self_references/Data/X1882/X1882.self.ref.reversed.withfilters.selfRef.homoplasmies.vcf.bgz'
-vcf_file = '/Users/rahulgupta/Desktop/reject_x1882.vcf'
-
-individual_name = 'K1516'
-output_prefix = '/out_k1516_fixed'
-self_to_ref_chain = '/data_in/K1516/K1516_to_reference.chain'
-ref_to_self_chain = '/data_in/K1516/reference_to_K1516.chain'
-self_fasta = '/data_in/K1516/K1516.self.ref.fasta'
-self_fai = '/data_in/K1516/K1516.self.ref.fasta.fai'
-self_homoplasmies = '/data_in/K1516/K1516.self.ref.reversed.withfilters.selfRef.homoplasmies.vcf.bgz'
-vcf_file = '/data_in/K1516/K1516.self.ref.final.split.selfToRef.rejected.vcf'
-reference_fasta = '/data_in/Homo_sapiens_assembly38.chrM.fasta'
-reference_fai = '/data_in/Homo_sapiens_assembly38.chrM.fasta.fai'
 
 reference_fasta = '/data_in/Homo_sapiens_assembly38.chrM.fasta'
 reference_fai = '/data_in/Homo_sapiens_assembly38.chrM.fasta.fai'
 vcf_file = '/selfToRef.rejected.vcf'
 success_vcf_file = '/selfToRef.pre.vcf'
 logging = 'log.log'
-
-individual_name = 'K1481'
-output_prefix = '/out_k1481_fixed'
-self_to_ref_chain = '/data_in/K1481/K1481_to_reference.chain'
-ref_to_self_chain = '/data_in/K1481/reference_to_K1481.chain'
-self_fasta = '/data_in/K1481/K1481.self.ref.fasta'
-self_fai = '/data_in/K1481/K1481.self.ref.fasta.fai'
-self_homoplasmies = '/data_in/K1481/K1481.self.ref.reversed.withfilters.selfRef.homoplasmies.vcf.bgz'
-
-individual_name = 'H1769'
-output_prefix = '/out_h1769_fixed'
-self_to_ref_chain = '/data_in/H1769/H1769_to_reference.chain'
-ref_to_self_chain = '/data_in/H1769/reference_to_H1769.chain'
-self_fasta = '/data_in/H1769/H1769.self.ref.fasta'
-self_fai = '/data_in/H1769/H1769.self.ref.fasta.fai'
-self_homoplasmies = '/data_in/H1769/H1769.self.ref.reversed.withfilters.selfRef.homoplasmies.vcf.bgz'
-
-individual_name = 'MY1812'
-output_prefix = '/out_my1812_fixed'
-self_to_ref_chain = '/data_in/MY1812/MY1812_to_reference.chain'
-ref_to_self_chain = '/data_in/MY1812/reference_to_MY1812.chain'
-self_fasta = '/data_in/MY1812/MY1812.self.ref.fasta'
-self_fai = '/data_in/MY1812/MY1812.self.ref.fasta.fai'
-self_homoplasmies = '/data_in/MY1812/MY1812.self.ref.reversed.withfilters.selfRef.homoplasmies.vcf.bgz'
-
-individual_name = 'T560'
-output_prefix = '/out_t560_fixed'
-self_to_ref_chain = '/data_in/T560/T560_to_reference.chain'
-ref_to_self_chain = '/data_in/T560/reference_to_T560.chain'
-self_fasta = '/data_in/T560/T560.self.ref.fasta'
-self_fai = '/data_in/T560/T560.self.ref.fasta.fai'
-self_homoplasmies = '/data_in/T560/T560.self.ref.reversed.withfilters.selfRef.homoplasmies.vcf.bgz'
-
-individual_name = 'K1488'
-output_prefix = '/out_k1488_fixed'
-self_to_ref_chain = '/data_in/K1488/K1488_to_reference.chain'
-ref_to_self_chain = '/data_in/K1488/reference_to_K1488.chain'
-self_fasta = '/data_in/K1488/K1488.self.ref.fasta'
-self_fai = '/data_in/K1488/K1488.self.ref.fasta.fai'
-self_homoplasmies = '/data_in/K1488/K1488.self.ref.reversed.withfilters.selfRef.homoplasmies.vcf.bgz'
-
-individual_name = 'V911'
-output_prefix = '/out_v911_fixed'
-self_to_ref_chain = '/data_in/V911/V911_to_reference.chain'
-ref_to_self_chain = '/data_in/V911/reference_to_V911.chain'
-self_fasta = '/data_in/V911/V911.self.ref.fasta'
-self_fai = '/data_in/V911/V911.self.ref.fasta.fai'
-self_homoplasmies = '/data_in/V911/V911.self.ref.reversed.withfilters.selfRef.homoplasmies.vcf.bgz'
-
-individual_name = 'V1081'
-output_prefix = '/out_v1081_fixed'
-self_to_ref_chain = '/data_in/V1081/V1081_to_reference.chain'
-ref_to_self_chain = '/data_in/V1081/reference_to_V1081.chain'
-self_fasta = '/data_in/V1081/V1081.self.ref.fasta'
-self_fai = '/data_in/V1081/V1081.self.ref.fasta.fai'
-self_homoplasmies = '/data_in/V1081/V1081.self.ref.reversed.withfilters.selfRef.homoplasmies.vcf.bgz'
-
-individual_name = 'HG00452.final'
-output_prefix = '/out_HG00452_final_fixed'
-self_to_ref_chain = '/data_in/HG00452/HG00452.final_to_reference.chain'
-ref_to_self_chain = '/data_in/HG00452/reference_to_HG00452.final.chain'
-self_fasta = '/data_in/HG00452/HG00452.final.self.ref.fasta'
-self_fai = '/data_in/HG00452/HG00452.final.self.ref.fasta.fai'
-self_homoplasmies = '/data_in/HG00452/HG00452.final.self.ref.reversed.withfilters.selfRef.homoplasmies.vcf.bgz'
-
-individual_name = 'NWD992111'
-output_prefix = '/out_NWD992111_fixed'
-self_to_ref_chain = '/data_in/NWD992111/NWD992111_to_reference.chain'
-ref_to_self_chain = '/data_in/NWD992111/reference_to_NWD992111.chain'
-self_fasta = '/data_in/NWD992111/NWD992111.self.ref.fasta'
-self_fai = '/data_in/NWD992111/NWD992111.self.ref.fasta.fai'
-self_homoplasmies = '/data_in/NWD992111/NWD992111.self.ref.reversed.withfilters.selfRef.homoplasmies.vcf.bgz'
-
-individual_name = '431-BG01977'
-output_prefix = '/out_431-BG01977_fixed'
-self_to_ref_chain = '/data_in/431-BG01977/431-BG01977_to_reference.chain'
-ref_to_self_chain = '/data_in/431-BG01977/reference_to_431-BG01977.chain'
-self_fasta = '/data_in/431-BG01977/431-BG01977.self.ref.fasta'
-self_fai = '/data_in/431-BG01977/431-BG01977.self.ref.fasta.fai'
-self_homoplasmies = '/data_in/431-BG01977/431-BG01977.self.ref.reversed.withfilters.selfRef.homoplasmies.vcf.bgz'
-
-individual_name = 'MH0126875'
-output_prefix = '/out_MH0126875_fixed'
-self_to_ref_chain = '/data_in/MH0126875/MH0126875_to_reference.chain'
-ref_to_self_chain = '/data_in/MH0126875/reference_to_MH0126875.chain'
-self_fasta = '/data_in/MH0126875/MH0126875.self.ref.fasta'
-self_fai = '/data_in/MH0126875/MH0126875.self.ref.fasta.fai'
-self_homoplasmies = '/data_in/MH0126875/MH0126875.self.ref.reversed.withfilters.selfRef.homoplasmies.vcf.bgz'
-
-individual_name = 'NWD380585'
-output_prefix = '/out_NWD380585_fixed'
-self_to_ref_chain = '/data_in/NWD380585/NWD380585_to_reference.chain'
-ref_to_self_chain = '/data_in/NWD380585/reference_to_NWD380585.chain'
-self_fasta = '/data_in/NWD380585/NWD380585.self.ref.fasta'
-self_fai = '/data_in/NWD380585/NWD380585.self.ref.fasta.fai'
-self_homoplasmies = '/data_in/NWD380585/NWD380585.self.ref.reversed.withfilters.selfRef.homoplasmies.vcf.bgz'
-
-individual_name = 'V40776'
-output_prefix = '/out_V40776_fixed'
-self_to_ref_chain = '/data_in/V40776/V40776_to_reference.chain'
-ref_to_self_chain = '/data_in/V40776/reference_to_V40776.chain'
-self_fasta = '/data_in/V40776/V40776.self.ref.fasta'
-self_fai = '/data_in/V40776/V40776.self.ref.fasta.fai'
-self_homoplasmies = '/data_in/V40776/V40776.self.ref.reversed.withfilters.selfRef.homoplasmies.vcf.bgz'
-
-individual_name = 'NWD137403'
-output_prefix = '/out_NWD137403_fixed'
-self_to_ref_chain = '/data_in/NWD137403/NWD137403_to_reference.chain'
-ref_to_self_chain = '/data_in/NWD137403/reference_to_NWD137403.chain'
-self_fasta = '/data_in/NWD137403/NWD137403.self.ref.fasta'
-self_fai = '/data_in/NWD137403/NWD137403.self.ref.fasta.fai'
-self_homoplasmies = '/data_in/NWD137403/NWD137403.self.ref.reversed.withfilters.selfRef.homoplasmies.vcf.bgz'
-
-individual_name = '10C109615'
-output_prefix = '/out_10C109615_fixed'
-self_to_ref_chain = '/data_in/10C109615/10C109615_to_reference.chain'
-ref_to_self_chain = '/data_in/10C109615/reference_to_10C109615.chain'
-self_fasta = '/data_in/10C109615/10C109615.self.ref.fasta'
-self_fai = '/data_in/10C109615/10C109615.self.ref.fasta.fai'
-self_homoplasmies = '/data_in/10C109615/10C109615.self.ref.reversed.withfilters.selfRef.homoplasmies.vcf.bgz'
-
-individual_name = 'MH0203805'
-output_prefix = '/out_MH0203805_fixed'
-self_to_ref_chain = '/data_in/MH0203805/MH0203805_to_reference.chain'
-ref_to_self_chain = '/data_in/MH0203805/reference_to_MH0203805.chain'
-self_fasta = '/data_in/MH0203805/MH0203805.self.ref.fasta'
-self_fai = '/data_in/MH0203805/MH0203805.self.ref.fasta.fai'
-self_homoplasmies = '/data_in/MH0203805/MH0203805.self.ref.reversed.withfilters.selfRef.homoplasmies.vcf.bgz'
-
-individual_name = '10C105253'
-output_prefix = '/out_10C105253_fixed'
-self_to_ref_chain = '/data_in/10C105253/10C105253_to_reference.chain'
-ref_to_self_chain = '/data_in/10C105253/reference_to_10C105253.chain'
-self_fasta = '/data_in/10C105253/10C105253.self.ref.fasta'
-self_fai = '/data_in/10C105253/10C105253.self.ref.fasta.fai'
-self_homoplasmies = '/data_in/10C105253/10C105253.self.ref.reversed.withfilters.selfRef.homoplasmies.vcf.bgz'
 
 
 parser = argparse.ArgumentParser()
