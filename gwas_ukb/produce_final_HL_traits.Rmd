@@ -1,0 +1,121 @@
+---
+title: "`r sub(' .+','',file.info(knitr::current_input())$ctime, perl = T)`_produce_final_HL_traits"
+author: "Rahul Gupta"
+date: "`r sub(' .+','',file.info(knitr::current_input())$ctime, perl = T)`"
+output: 
+  pdf_document:
+    number_sections: true
+    fig_width: 7
+    fig_height: 5
+---
+
+```{r wrapping, echo = F, include = F}
+library(knitr)
+library(formatR)
+hook_output = knit_hooks$get('output')
+knit_hooks$set(output = function(x, options) {
+  # this hook is used only when the linewidth option is not NULL
+  if (!is.null(n <- options$linewidth)) {
+    x = knitr:::split_lines(x)
+    # any lines wider than n should be wrapped
+    if (any(nchar(x) > n)) x = strwrap(x, width = n)
+    x = paste(x, collapse = '\n')
+  }
+  hook_output(x, options)
+})
+opts_chunk$set(tidy.opts=list(width.cutoff=85),
+               linewidth=85,
+               tidy=F)
+```
+
+```{r library, include=FALSE}
+prefix <- "/Volumes/rahul/"
+library(tidyverse)
+library(pheatmap)
+library(grid)
+library(gtable)
+source(paste0(prefix,'Proj_utilities/ukb_nmr_metabolomics_qc.R'))
+```
+
+```{r helpers}
+trim_array <- function(x) str_remove_all(x, '[\\[\\]\\\\\\"]')
+is_indel <- function(x) any(sapply(str_split_fixed(x, ',', 2), str_length)>1)
+parse_s <- function(vec) as.numeric(str_split_fixed(vec, '_', 4)[,1])
+binary_t <- function(vec, tf, ...) t.test(vec[tf], vec[!tf], ...)
+failed_flags <- c('weak_evidence', 'contamination', 'base_qual', 'strand_bias', 
+                  'artifact_prone_site', 'map_qual', 'position')
+filter_variant_table <- function(table, suffix, keep_artifact_prone_site=F) {
+  if(!keep_artifact_prone_site) { failed_flags_this <- failed_flags }
+  else { failed_flags_this <- failed_flags[failed_flags != 'artifact_prone_site'] }
+  tf_fail <- str_detect(table[[paste0('FT', suffix)]], paste0(failed_flags_this, collapse='|'))
+  return(table[!tf_fail,])
+}
+# produces appropriate matrix with HL excluding samples with missing values (QC'd out)
+produce_allsamphl_matrix <- function(tab, variants) {
+  all_samples <- as.character(unique(tab$s))
+  mat <- matrix(data = 0, nrow = length(all_samples), 
+                ncol = length(variants), 
+                dimnames=list(all_samples,variants))
+  for(x in variants) {
+    matching_vars <- tab %>% filter(variant %in% x) %>% 
+      transmute(s=as.character(s), HL) %>%
+      mutate(HL = ifelse(HL >= 0.95, NA, HL))
+    mat[matching_vars$s,x] <- matching_vars$HL
+  }
+  mat %>%
+    as.data.frame() %>%
+    rownames_to_column('s') %>%
+    as_tibble() %>%
+    return()
+}
+```
+
+
+```{r import, message=F}
+nmr_covars <- ukb.nmr.import_covariates()
+samples_2006 <- nmr_covars %>% filter(final_month_category == 2006) %>% pull(s)
+sample_stat <- read_tsv(paste0(REF_DATA,'221012_filtered_ukb_tab_per_sample_stats.tsv'), 
+                        guess_max=200000) %>%
+  mutate(s=parse_s(s)) %>% filter(!s %in% samples_2006)
+proc_calls_loc <- paste0(REF_DATA,'filt_annotated_combined_processed_flat.tsv.bgz')
+ukb_calls_proc <- read_tsv(proc_calls_loc) %>% mutate(s=parse_s(s)) %>%
+  filter(!s %in% samples_2006)
+ukb_homoplasmies <- ukb_calls_proc %>% filter(HL > 0.95) %>%
+  transmute(locus, alleles, variant, s=as.character(s), HL=HL, major_haplogroup, mtcn=mito_cn)
+ever_homoplasmic <- ukb_homoplasmies %>% filter(!duplicated(variant))
+```
+
+# Get variants
+
+```{r}
+tab_of_vars_het <- ukb_calls_proc %>% 
+  filter(common_low_heteroplasmy, HL < 0.95, !is.na(HL)) %>% 
+  group_by(variant) %>% 
+  summarize(N = n()) %>% 
+  arrange(desc(N)) %>% filter(N > 500)
+variants_hl <- tab_of_vars_het$variant
+```
+
+# Output for HL
+
+```{r}
+alls <- tibble(s = ukb_calls_proc%>% pull(s) %>% unique())
+data_all_HL <- ukb_calls_proc %>% 
+  filter(variant %in% variants_hl, !is.na(HL), HL < 0.95) %>% 
+  pivot_wider(id_cols=s, names_from=variant, values_from=HL) %>%
+  right_join(y = alls, by='s')
+backbone <- data_all_HL %>% transmute(s)
+for(vari in variants_hl)  {
+  this_name <-  paste0(str_replace_all(vari, ':|,', '_'), '_lowHLqc')
+  backbone[[this_name]] <- data_all_HL[[vari]]
+}
+write_tsv(backbone, '221019_ukb_heteroplasmies_case_only.tsv')
+
+backbone_caco <- data_all_HL_0 %>% transmute(s)
+for(vari in variants_hl)  {
+  this_name <-  paste0(str_replace_all(vari, ':|,', '_'), '_lowHLqc_caco')
+  backbone_caco[[this_name]] <- ifelse(data_all_HL_0[[vari]] > 0, 1, 0)
+}
+write_tsv(backbone_caco, '221019_ukb_heteroplasmies_case_control.tsv')
+```
+
